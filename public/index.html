@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TecnoKids · Aventuras de tecnología</title>
+  <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/css/style.css" rel="stylesheet">
+</head>
+<body>
+  <div class="space-effects" id="space-effects" aria-hidden="true"></div>
+  <nav class="navbar navbar-expand-md tk-nav">
+    <div class="container">
+      <a class="navbar-brand tk-logo" href="#/">Tecno<span>Kids</span></a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#menu" aria-label="Abrir menú"><span class="navbar-toggler-icon"></span></button>
+      <div class="collapse navbar-collapse" id="menu"><ul class="navbar-nav ms-auto gap-md-2" id="nav-links"></ul></div>
+    </div>
+  </nav>
+  <main class="container py-4" id="app" tabindex="-1"></main>
+
+  <aside class="byte-widget" id="byte-widget" aria-label="Ayuda de Byte">
+    <section class="byte-panel" id="byte-panel" aria-labelledby="byte-title" hidden>
+      <header class="byte-panel-header">
+        <div><strong id="byte-title">🤖 Byte te ayuda</strong><span>¿Necesitas algo?</span></div>
+        <div class="byte-panel-tools">
+          <button class="byte-tool" id="byte-voice" type="button" aria-pressed="false" aria-label="Activar voz">🔇</button>
+          <button class="byte-tool" id="byte-close" type="button" aria-label="Cerrar ayuda">✕</button>
+        </div>
+      </header>
+      <p class="byte-answer" id="byte-answer" aria-live="polite">¡Hola! Puedo explicarte cómo jugar, darte una pista o ayudarte a mejorar tu PC.</p>
+      <div class="byte-options" role="group" aria-label="Opciones de ayuda">
+        <button type="button" data-byte-help="how">🎮 ¿Cómo juego?</button>
+        <button type="button" data-byte-help="hint">💡 Dame una pista</button>
+        <button type="button" data-byte-help="upgrade">🛠️ ¿Qué puedo mejorar?</button>
+      </div>
+      <a class="byte-link" id="byte-link" href="#/mi-pc" hidden>Ver mi PC</a>
+    </section>
+    <button class="byte-launcher" id="byte-launcher" type="button" aria-expanded="false" aria-controls="byte-panel" aria-label="Abrir ayuda de Byte">
+      <svg class="byte-mascot" width="48" height="54" viewBox="0 0 96 110" aria-hidden="true" focusable="false">
+        <g class="byte-legs" fill="none" stroke="#ffcf33" stroke-width="7" stroke-linecap="round">
+          <path class="byte-leg-left" d="M36 98 29 106"/>
+          <path class="byte-leg-right" d="M60 98 67 106"/>
+        </g>
+        <g class="byte-arms" fill="none" stroke="#35e0b2" stroke-width="7" stroke-linecap="round">
+          <path class="byte-arm-left" d="m18 48-8 14"/>
+          <path class="byte-arm-right" d="m78 48 8 14"/>
+        </g>
+        <line x1="48" y1="4" x2="48" y2="18" stroke="#ffcf33" stroke-width="4"/>
+        <circle cx="48" cy="6" r="6" fill="#ff6b81"/>
+        <rect x="14" y="18" width="68" height="50" rx="16" fill="#35e0b2"/>
+        <rect x="24" y="30" width="48" height="26" rx="10" fill="#16124a"/>
+        <circle cx="38" cy="43" r="6" fill="#ffcf33"/>
+        <circle cx="58" cy="43" r="6" fill="#ffcf33"/>
+        <rect x="22" y="72" width="52" height="30" rx="10" fill="#ffcf33"/>
+        <circle cx="48" cy="87" r="6" fill="#ff6b81"/>
+      </svg>
+      <span class="byte-launcher-label">¿Ayuda?</span>
+    </button>
+  </aside>
+
+  <div class="modal fade" id="settings" tabindex="-1" aria-labelledby="settings-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content tk-modal">
+        <div class="modal-header">
+          <h2 class="h4 mb-0" id="settings-title">⚙️ Ajustes</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="set-sonido">
+            <label class="form-check-label fw-bold" for="set-sonido">Sonido <span id="set-estado">activado</span></label>
+          </div>
+          <label class="form-label fw-bold" for="set-bgm">🎵 Música de fondo: <span id="set-bgm-val">60</span>%</label>
+          <input type="range" class="form-range" id="set-bgm" min="0" max="100" step="5">
+          <label class="form-label fw-bold mt-2" for="set-sfx">🔔 Efectos de sonido: <span id="set-sfx-val">80</span>%</label>
+          <input type="range" class="form-range" id="set-sfx" min="0" max="100" step="5">
+          <p class="small mb-0">Tus preferencias se guardan en este dispositivo.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-tk" type="button" data-bs-dismiss="modal">¡Listo!</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="difficulty" tabindex="-1" aria-labelledby="diff-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content tk-modal text-center">
+        <div class="modal-header">
+          <h2 class="h4 mb-0" id="diff-title">¿Cómo quieres jugar?</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="fs-5 mb-3" id="diff-game"></p>
+          <button class="btn diff-btn facil" type="button" data-diff="facil">🟢 Fácil<small>Velocidad lenta y tiempo de sobra</small></button>
+          <button class="btn diff-btn medio" type="button" data-diff="medio">🟡 Medio<small>Velocidad normal</small></button>
+          <button class="btn diff-btn dificil" type="button" data-diff="dificil">🔴 Difícil<small>Velocidad rápida y más obstáculos</small></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="roulette" tabindex="-1" aria-labelledby="roulette-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content tk-modal text-center roulette-modal">
+        <div class="modal-header roulette-header">
+          <h2 class="h4 mb-0" id="roulette-title">🎡 Ruleta Tecno</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body roulette-body">
+          <div class="wheel-wrap"><canvas id="wheel" width="320" height="320" aria-label="Ruleta de premios"></canvas></div>
+          <p class="fs-5 fw-bold mb-1" id="wheel-msg">¡Prueba tu suerte!</p>
+          <p class="mb-0" id="wheel-state"></p>
+        </div>
+        <div class="modal-footer justify-content-center">
+          <button class="btn btn-tk" id="wheel-go" type="button">¡Girar!</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/soundManager.js"></script>
+  <script src="/js/speechManager.js"></script>
+  <script src="/js/games.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/spaceEffects.js"></script>
+  <script src="/js/byteAssistant.js"></script>
+</body>
+</html>
