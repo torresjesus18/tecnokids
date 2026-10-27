@@ -14,7 +14,8 @@ body::after{inset:-12%;opacity:.26;background:radial-gradient(ellipse at 25% 35%
 .space-impact{font-size:30px;line-height:1;filter:drop-shadow(0 0 12px #ffcf33)}
 .space-impact::before{content:"";position:absolute;inset:-8px;border:2px solid rgba(255,207,51,.9);border-radius:50%;animation:impact-ring .85s ease-out forwards}
 @keyframes impact-ring{to{transform:scale(2.2);opacity:0}}
-main,.tk-nav{position:relative;z-index:2}
+main,.tk-nav,.tk-footer{position:relative;z-index:2}
+.tk-footer{color:#d3cfee;border-top:1px solid rgba(244,242,255,.2)}
 @keyframes stars-drift{to{background-position:240px 140px}}
 @keyframes stars-twinkle{from{opacity:.3}to{opacity:.58}}
 @keyframes nebula-drift{from{transform:translate3d(-1.5%,1%,0) scale(.98)}to{transform:translate3d(1.5%,-1%,0) scale(1.04)}}
@@ -113,11 +114,30 @@ h1,h2,h3{font-weight:900}
 .badge-tk{display:inline-flex;gap:.4rem;align-items:center;background:#fff;border-radius:2rem;padding:.4rem .9rem;font-weight:700}
 .badge-tk.locked{opacity:.4;filter:grayscale(1)}
 .form-control{border-radius:1rem;padding:.7rem 1rem;border:3px solid #cfc9f5}
+.panel .form-select{border:3px solid #cfc9f5;border-radius:1rem;padding:.7rem 2.5rem .7rem 1rem;color:var(--tinta)}
+.panel #f{font-size:1rem}
+.panel .form-control:focus,.panel .form-select:focus{border-color:var(--menta);box-shadow:0 0 0 .25rem rgba(53,224,178,.25)}
+.panel .form-check{min-height:2.5rem;display:flex;align-items:center;gap:.55rem}
+.panel .form-check-input{width:1.5em;height:1.5em;flex:0 0 auto;margin:0;border:2px solid #827bb5}
+.panel .form-check-input:checked{background-color:var(--orbita);border-color:var(--orbita)}
+.panel .form-check-input:focus{border-color:var(--menta);box-shadow:0 0 0 .25rem rgba(53,224,178,.25)}
+.panel .form-check-input:focus-visible{outline:3px solid var(--coral);outline-offset:2px}
+.panel .form-check-label{padding-left:.2rem}
+.panel .invalid-feedback{color:#a51d35;font-weight:700}
+.panel .form-text{color:#514c88}
+.panel fieldset{min-width:0}
+.panel legend{float:none;width:auto;font-size:1rem}
+.panel .input-group>.invalid-feedback{flex-basis:100%}
 .pop{animation:pop .5s cubic-bezier(.3,1.6,.5,1)}@keyframes pop{from{transform:scale(.6);opacity:0}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 .game-wrap{max-width:480px;margin:0 auto}
 .game-wrap canvas{display:block;width:100%;height:auto;border-radius:1.4rem;border:4px solid var(--menta);background:#16124a;touch-action:none}
+.race-touch-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;margin-top:.7rem}
+.race-control{display:flex;min-width:0;min-height:3.5rem;align-items:center;justify-content:center;gap:.35rem;padding:.45rem .25rem;border:2px solid var(--menta);border-radius:1rem;background:var(--nube);color:var(--tinta);font-size:1.1rem;font-weight:900;touch-action:none}
+.race-control span{font-size:.82rem}
+.race-control.nitro{border-color:var(--coral);background:#ffe0e5}
+.race-control:focus-visible{outline:3px solid var(--sol);outline-offset:2px}
 .game-menu .game-back{display:inline-flex;margin-bottom:1rem}
 .game-lobby-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1.5rem;align-items:center}
 .game-lobby-action{display:flex;flex-direction:column;align-items:flex-start;gap:.8rem;min-width:0}

@@ -236,10 +236,6 @@ class RaceGame extends BaseGame {
     // Estrellas en tres capas: al avanzar se mueven a distinta velocidad (parallax).
     this.stars = [[], [], []];
     for (let i = 0; i < 66; i++) this.stars[i % 3].push({ x: Math.random() * this.W, y: Math.random() * this.H, s: 1 + (i % 3) });
-    // Botones táctiles grandes: girar a izquierda/derecha y turbo (se mantiene pulsado).
-    this.btn('left', 16, this.H - 86, 78, 72, '◀', '#35e0b2');
-    this.btn('right', 102, this.H - 86, 78, 72, '▶', '#35e0b2');
-    this.btn('nitro', this.W - 102, this.H - 86, 86, 72, '🚀', '#ff6b81');
   }
   onKey(k) {
     if (k === 'arrowleft' || k === 'a') this.me.lane = Math.max(0, this.me.lane - 1);
@@ -1069,7 +1065,6 @@ class DiskOrganizerGame extends BaseGame {
     this.fallT = 0;
     this.moveT = 0;
     this.softDropT = 0;
-    this.timeLeft = 75;
     this.ready = 3;
     this.btn('left', 38, this.H - 64, 70, 48, '⬅️');
     this.btn('down', 116, this.H - 64, 70, 48, '⬇️');
@@ -1133,6 +1128,10 @@ class DiskOrganizerGame extends BaseGame {
     while (remaining.length < this.rows) remaining.unshift(Array(this.cols).fill(null));
     this.grid = remaining;
     if (cleared) { this.addFloat(this.W / 2, this.boardY + 80, `+${cleared} fila${cleared > 1 ? 's' : ''}`, '#35e0b2'); sfx('star'); }
+    if (this.lines >= 6) {
+      this.end(this.result(true));
+      return;
+    }
     this.spawn();
   }
 
@@ -1156,10 +1155,6 @@ class DiskOrganizerGame extends BaseGame {
   update(dt) {
     this.t += dt;
     if (this.ready > 0) { this.ready -= dt; return; }
-    if ((this.timeLeft -= dt) <= 0) {
-      this.end(this.result(this.lines >= 4));
-      return;
-    }
     const horizontal = this.keys.arrowleft || this.keys.a ? -1 : this.keys.arrowright || this.keys.d ? 1 : 0;
     if (horizontal) {
       this.moveT -= dt;
@@ -1191,7 +1186,6 @@ class DiskOrganizerGame extends BaseGame {
     c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; c.font = 'bold 20px sans-serif';
     c.fillText('💾 ORGANIZA EL DISCO', 18, 30);
     c.font = 'bold 16px sans-serif'; c.fillText(`Filas: ${this.lines}   Archivos: ${this.pieces}`, 18, 62);
-    c.fillStyle = '#ffcf33'; c.fillText(`Tiempo: ${Math.ceil(this.timeLeft)} s`, 18, 88);
     c.fillStyle = '#17183c'; c.fillRect(this.boardX - 4, this.boardY - 4, this.cols * this.cell + 8, this.rows * this.cell + 8);
     for (let y = 0; y < this.rows; y++) for (let x = 0; x < this.cols; x++) {
       const px = this.boardX + x * this.cell, py = this.boardY + y * this.cell;
@@ -1225,7 +1219,7 @@ class DataMazeGame extends BaseGame {
     this.packets = this.placeItems(this.targetPackets, [this.startPos, this.goal]);
     this.viruses = this.placeItems(2, [this.startPos, this.goal, ...this.packets]);
     this.lives = 3; this.t = 0; this.moveT = 0;
-    this.virusT = 0; this.timeLeft = 90; this.ready = this.p.componentLevels.rom === 1 ? 5 : 3;
+    this.virusT = 0; this.ready = this.p.componentLevels.rom === 1 ? 5 : 3;
     this.pointerDir = null; this.pointerMoveT = 0;
     const btnY = this.H - 62;
     this.btn('up', this.W / 2 - 36, btnY - 48, 72, 44, '⬆️');
@@ -1348,11 +1342,6 @@ class DataMazeGame extends BaseGame {
   update(dt) {
     this.t += dt;
     if (this.ready > 0) { this.ready -= dt; return; }
-    if ((this.timeLeft -= dt) <= 0) {
-      const collected = this.targetPackets - this.packets.length;
-      this.end(this.result(collected >= 5));
-      return;
-    }
     const dx = this.keys.arrowleft || this.keys.a ? -1 : this.keys.arrowright || this.keys.d ? 1 : 0;
     const dy = this.keys.arrowup || this.keys.w ? -1 : this.keys.arrowdown || this.keys.s ? 1 : 0;
     const cpu = this.p.componentLevels.cpu || 1;
@@ -1379,7 +1368,6 @@ class DataMazeGame extends BaseGame {
     c.font = 'bold 15px sans-serif'; c.fillStyle = '#ffcf33';
     c.fillText(`Paquetes: ${this.targetPackets - this.packets.length}/${this.targetPackets}`, 16, 60);
     c.fillStyle = '#ff6b81'; c.fillText(`Vidas: ${'❤️'.repeat(this.lives)}`, 16, 88);
-    c.fillStyle = '#fff'; c.fillText(`Tiempo: ${Math.ceil(this.timeLeft)} s`, 180, 88);
     for (let y = 0; y < this.rows; y++) for (let x = 0; x < this.cols; x++) {
       const px = this.boardX + x * this.cell, py = this.boardY + y * this.cell;
       c.fillStyle = this.maze[y][x] ? '#29346b' : '#101b42';

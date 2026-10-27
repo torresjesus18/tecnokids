@@ -53,8 +53,8 @@ const games = {
     min: { cpu: 2, ram: 2, gpu: 2, rom: 1 }, rec: { cpu: 3, ram: 3, gpu: 3, rom: 2 }
   },
   'organizador-disco': {
-    name: 'El Organizador de Disco', icon: '💾', minSeconds: 30, maxCoins: 70,
-    desc: 'Acomoda bloques de archivos para completar filas y liberar espacio antes de que el disco se llene.',
+    name: 'El Organizador de Disco', icon: '💾', minSeconds: 20, maxCoins: 70,
+    desc: 'Acomoda bloques de archivos para liberar 6 filas y organizar el disco. ¡Evita que se llene!',
     controls: 'Flechas izquierda y derecha para mover, abajo para acelerar, arriba para girar y espacio para soltar.',
     min: { cpu: 1, ram: 1, gpu: 1, rom: 1 }, rec: { cpu: 2, ram: 2, gpu: 1, rom: 2 }
   },

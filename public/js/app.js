@@ -212,15 +212,68 @@ function viewAuth(start) {
   show(`<div class="row justify-content-center"><div class="col-md-8 col-lg-6"><div class="panel">
     <ul class="nav nav-pills mb-3" role="tablist"><li class="nav-item"><button class="nav-link active" id="t-login" type="button">Ya tengo cuenta</button></li>
     <li class="nav-item"><button class="nav-link" id="t-reg" type="button">Soy nuevo</button></li></ul>
-    <form id="f"></form><div id="msg"></div></div></div></div>`);
+    <form id="f" class="needs-validation" novalidate></form><div id="msg"></div></div></div></div>`);
   const f = document.querySelector('#f');
   let mode = start === 'registro' ? 'reg' : 'login';
   const draw = () => {
-    f.innerHTML = `${mode === 'reg' ? `<label class="form-label fw-bold" for="u">Tu alias (no uses tu nombre real)</label><input class="form-control mb-3" id="u" maxlength="20" minlength="3" pattern="[A-Za-z0-9_]{3,20}" title="Usa de 3 a 20 letras, números o guion bajo." required autocomplete="username">` : ''}
-      <label class="form-label fw-bold" for="e">Correo</label><input class="form-control mb-3" id="e" type="email" maxlength="120" required autocomplete="email">
-      <label class="form-label fw-bold" for="p">Contraseña (mínimo 8 caracteres)</label>
-      <div class="input-group mb-3"><input class="form-control" id="p" type="password" minlength="8" maxlength="72" required autocomplete="${mode === 'reg' ? 'new-password' : 'current-password'}">
-        <button class="btn btn-outline-secondary" id="toggle-password" type="button" aria-controls="p" aria-pressed="false">👁 Mostrar</button></div>
+    f.classList.remove('was-validated');
+    f.innerHTML = `${mode === 'reg' ? `<div class="mb-3">
+        <label class="form-label fw-bold" for="u">Tu alias (no uses tu nombre real)</label>
+        <input class="form-control" id="u" maxlength="20" minlength="3" pattern="[A-Za-z0-9_]{3,20}" title="Usa de 3 a 20 letras, números o guion bajo." required autocomplete="username">
+        <div class="invalid-feedback">Usa de 3 a 20 letras, números o guion bajo.</div>
+      </div>` : ''}
+      <div class="mb-3">
+        <label class="form-label fw-bold" for="e">Correo de tu mamá, papá o un adulto</label>
+        <input class="form-control" id="e" type="email" maxlength="120" required autocomplete="email">
+        <div class="form-text">Lo usamos solo para tu cuenta.</div>
+        <div class="invalid-feedback">Escribe un correo, por ejemplo: nombre@correo.com 🙂</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-bold" for="p">Contraseña (mínimo 8 caracteres)</label>
+        <div class="input-group">
+          <input class="form-control" id="p" type="password" minlength="8" maxlength="72" required autocomplete="${mode === 'reg' ? 'new-password' : 'current-password'}">
+          <button class="btn btn-outline-secondary" id="toggle-password" type="button" aria-controls="p" aria-pressed="false">👁 Mostrar</button>
+          <div class="invalid-feedback">La contraseña debe tener entre 8 y 72 caracteres.</div>
+        </div>
+      </div>
+      ${mode === 'reg' ? `<fieldset class="mb-3">
+          <legend class="form-label fw-bold mb-2">🧩 ¿Qué pieza del PC te da más curiosidad?</legend>
+          <select class="form-select" id="pieza-favorita" required>
+            <option value="" selected disabled>Elige una…</option>
+            <option value="cpu">Procesador</option>
+            <option value="ram">Memoria</option>
+            <option value="gpu">Tarjeta gráfica</option>
+            <option value="rom">Almacenamiento</option>
+          </select>
+          <div class="invalid-feedback">Elige una pieza para continuar 🙂</div>
+        </fieldset>
+        <fieldset class="mb-3">
+          <legend class="form-label fw-bold mb-2">🎮 ¿Con qué dificultad quieres empezar?</legend>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="dificultad-inicial" id="dificultad-facil" value="facil" required checked>
+            <label class="form-check-label" for="dificultad-facil">🟢 Fácil</label>
+            <div class="invalid-feedback">Elige una dificultad para empezar 🙂</div>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="dificultad-inicial" id="dificultad-medio" value="medio" required>
+            <label class="form-check-label" for="dificultad-medio">🟡 Medio</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="dificultad-inicial" id="dificultad-dificil" value="dificil" required>
+            <label class="form-check-label" for="dificultad-dificil">🔴 Difícil</label>
+          </div>
+        </fieldset>
+        <div class="mb-3">
+          <label class="form-label fw-bold" for="nombre-pc">🤖 Ponle un nombre a tu PC (no uses tu nombre real)</label>
+          <textarea class="form-control" id="nombre-pc" maxlength="40" rows="2" placeholder="Ejemplo: PC Galáctica"></textarea>
+          <div class="form-text">Opcional. Este nombre no se guarda.</div>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="adulto" required>
+          <label class="form-check-label" for="adulto">👨‍👩‍👧 Un adulto sabe que voy a jugar.</label>
+          <div class="invalid-feedback">Pídele a un adulto que te ayude con este paso 🙂</div>
+        </div>
+        <p class="form-text">La pieza y la dificultad que elegiste no se guardan en tu cuenta.</p>` : ''}
       <button class="btn btn-tk w-100" type="submit">${mode === 'reg' ? 'Crear mi cuenta' : 'Entrar'}</button>
       <p class="text-center mt-3 mb-0">${mode === 'reg' ? '¿Ya tienes cuenta?' : '¿Primera vez aquí?'} <a href="#" id="sw" class="fw-bold">${mode === 'reg' ? 'Entra aquí' : 'Crea tu cuenta'}</a></p>`;
     document.querySelector('#toggle-password').onclick = e => {
@@ -239,6 +292,12 @@ function viewAuth(start) {
   document.querySelector('#t-reg').onclick = () => { mode = 'reg'; draw(); };
   f.onsubmit = async e => {
     e.preventDefault();
+    if (!f.checkValidity()) {
+      e.stopPropagation();
+      f.classList.add('was-validated');
+      return;
+    }
+    f.classList.add('was-validated');
     const v = id => (document.querySelector('#' + id) || {}).value || '';
     const body = mode === 'reg' ? { username: v('u').trim(), email: v('e').trim(), password: v('p') } : { email: v('e').trim(), password: v('p') };
     try { me = await api('/auth/' + (mode === 'reg' ? 'register' : 'login'), 'POST', body); location.hash = '#/mundo'; route(); }
@@ -516,6 +575,11 @@ function play(id, g, s) {
         <button class="btn btn-tk" id="resume-game" type="button">▶ Continuar</button>
       </div>
     </div>
+    ${id === 'carrera' ? `<div class="race-touch-controls" id="race-touch-controls" aria-label="Controles de Carrera Cósmica">
+      <button class="race-control" type="button" data-control="left" aria-label="Cambiar al carril izquierdo">◀ <span>Izquierda</span></button>
+      <button class="race-control nitro" type="button" data-control="nitro" aria-label="Mantener para usar turbo">🚀 <span>Mantén para turbo</span></button>
+      <button class="race-control" type="button" data-control="right" aria-label="Cambiar al carril derecho"><span>Derecha</span> ▶</button>
+    </div>` : ''}
     <p class="text-center mt-2 mb-0" data-speak="${esc(g.controls)}">${esc(g.controls)}</p></div>`);
   const Game = ENGINES[id] || DefenseGame;
   currentGame = new Game(document.querySelector('#cv'), s.profile, async o => {
@@ -527,6 +591,38 @@ function play(id, g, s) {
   });
   const pauseButton = document.querySelector('#pause-game');
   const pauseOverlay = document.querySelector('#game-paused');
+  const raceControls = document.querySelector('#race-touch-controls');
+  if (raceControls) {
+    let nitroPointer = null;
+    let keyboardNitroTimer;
+    raceControls.addEventListener('pointerdown', event => {
+      const button = event.target.closest('button[data-control]');
+      if (!button) return;
+      event.preventDefault();
+      currentGame.onButton(button.dataset.control, 'pointerdown');
+      if (button.dataset.control === 'nitro') {
+        nitroPointer = event.pointerId;
+        button.setPointerCapture(event.pointerId);
+      }
+    });
+    const releaseNitro = event => {
+      if (event.pointerId !== nitroPointer) return;
+      currentGame?.onButton('nitro', event.type === 'pointerup' ? 'pointerup' : 'pointercancel');
+      nitroPointer = null;
+    };
+    raceControls.addEventListener('pointerup', releaseNitro);
+    raceControls.addEventListener('pointercancel', releaseNitro);
+    raceControls.addEventListener('lostpointercapture', releaseNitro);
+    raceControls.addEventListener('click', event => {
+      const button = event.target.closest('button[data-control]');
+      if (!button || event.detail !== 0) return;
+      if (button.dataset.control === 'nitro') {
+        currentGame.onButton('nitro', 'pointerdown');
+        clearTimeout(keyboardNitroTimer);
+        keyboardNitroTimer = setTimeout(() => currentGame?.onButton('nitro', 'pointerup'), 180);
+      } else currentGame.onButton(button.dataset.control, 'pointerdown');
+    });
+  }
   const togglePause = () => {
     if (currentGame.paused) {
       currentGame.resume();
@@ -566,9 +662,9 @@ function showResult(id, g, o, r) {
     : id === 'carrera' ? (o.position === 1
       ? '¡Genial! Prueba una dificultad más alta.'
       : 'Recoge ⚡ y esquiva los conos.')
-    : id === 'organizador-disco' ? (o.lines >= 4
-      ? '¡Buen trabajo! Busca completar varias filas seguidas.'
-      : 'Gira los bloques y completa una fila antes de soltar.')
+    : id === 'organizador-disco' ? (o.won
+      ? '¡Liberaste seis filas y organizaste el disco!'
+      : 'Gira los bloques y libera seis filas antes de que se llene.')
     : id === 'laberinto-datos' ? (o.won
       ? '¡Misión cumplida! Busca más paquetes por otras rutas.'
       : 'Cambia de camino para esquivar virus y juntar paquetes.')
@@ -592,7 +688,7 @@ function showResult(id, g, o, r) {
     ${r.newAchievements.map(a => `<div class="badge-tk pop my-2 mx-1">${a.icon} Nueva insignia: ${esc(a.name)}</div>`).join('')}
     <div class="my-3 mx-auto" style="max-width:28rem">${bar(r.progress)}<div class="small mt-1">Nivel ${r.progress.level}</div></div>
     <button class="btn btn-tk" id="again" type="button">Jugar otra vez</button>
-    <a class="btn btn-tk alt" href="#/mi-pc">Comprar piezas</a> <a class="btn btn-outline-dark" href="#/mundo">Mi mundo</a></div>`);
+    <a class="btn btn-tk alt" href="#/mi-pc">Comprar piezas</a> <a class="btn btn-tk alt" href="#/mundo">🌍 Mi mundo</a></div>`);
   // "Jugar otra vez" vuelve a preguntar la dificultad y arranca sin más pantallas.
   document.querySelector('#again').onclick = () => startGame(id, g);
 }

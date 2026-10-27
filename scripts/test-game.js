@@ -32,6 +32,7 @@ for (const game of ['organizador-disco', 'laberinto-datos']) {
   assert.strictEqual(sim.profile(game, best).status, 'ok');
   assert.ok(r.coinsFor(game, { score: 100 }, sim.profile(game, best), 45, games[game]) > 0);
 }
+assert.strictEqual(games['organizador-disco'].minSeconds, 20);
 const balancedPc = { cpu: 'cpu2', ram: 'ram2', gpu: 'gpu2', rom: 'rom2' };
 assert.strictEqual(sim.profile('carrera', balancedPc).status, 'ok');
 const starterRom = sim.profile('carrera', { ...balancedPc, rom: 'rom1' });
@@ -73,6 +74,7 @@ const raceProfile = { ...sim.profile('carrera', starter), difficulty: 'facil' };
 const easyRace = new RaceGame(canvas, raceProfile, () => {});
 const normalRace = new RaceGame(canvas, { ...raceProfile, difficulty: 'medio' }, () => {});
 const hardRace = new RaceGame(canvas, { ...raceProfile, difficulty: 'dificil' }, () => {});
+assert.strictEqual(easyRace.buttons.length, 0, 'los controles táctiles de Carrera deben estar fuera del área de juego');
 assert.ok(easyRace.me.speed > 140, 'la velocidad base del jugador debe ser más rápida que antes');
 assert.ok(easyRace.L < 3200, 'la pista debe tomar menos tiempo en completarse');
 assert.ok(easyRace.bots.every((bot, i) => bot.base < normalRace.bots[i].base));
@@ -118,10 +120,33 @@ const diskGame = new DiskOrganizerGame(canvas, gameProfile, () => {});
 const piecesBeforeDrop = diskGame.pieces;
 diskGame.hardDrop();
 assert.strictEqual(diskGame.pieces, piecesBeforeDrop + 1, 'soltar una pieza debe asentarla una sola vez');
+assert.strictEqual('timeLeft' in diskGame, false, 'el Organizador de Disco no debe tener temporizador');
+diskGame.ready = 0;
+diskGame.update(100);
+assert.strictEqual(diskGame.done, false, 'el Organizador no debe terminar solo por pasar el tiempo');
 diskGame.lines = 3;
 assert.deepStrictEqual(diskGame.result(false), {
   crashed: false, score: 54, won: false, lines: 3, pieces: 1
 });
+
+const winningDisk = new DiskOrganizerGame(canvas, gameProfile, () => {});
+winningDisk.end = result => { winningDisk.done = true; winningDisk.endResult = result; };
+winningDisk.lines = 5;
+winningDisk.grid = Array.from({ length: winningDisk.rows }, () => Array(winningDisk.cols).fill(null));
+winningDisk.grid[winningDisk.rows - 1].fill({ color: '#5ad1ff', icon: '📁' });
+winningDisk.grid[winningDisk.rows - 1][winningDisk.cols - 1] = null;
+winningDisk.active = { cells: [[1]], color: '#5ad1ff', icon: '📁', x: winningDisk.cols - 1, y: winningDisk.rows - 1 };
+winningDisk.lockPiece();
+assert.strictEqual(winningDisk.done, true, 'liberar seis filas debe terminar el Organizador');
+assert.strictEqual(winningDisk.endResult.won, true, 'liberar seis filas debe dar la victoria');
+assert.strictEqual(winningDisk.endResult.lines, 6);
+
+const fullDisk = new DiskOrganizerGame(canvas, gameProfile, () => {});
+fullDisk.end = result => { fullDisk.done = true; fullDisk.endResult = result; };
+fullDisk.grid[0].fill({ color: '#5ad1ff', icon: '📁' });
+fullDisk.spawn();
+assert.strictEqual(fullDisk.done, true, 'el tablero lleno debe terminar el Organizador');
+assert.strictEqual(fullDisk.endResult.won, false, 'llenar el tablero debe terminar sin victoria');
 
 const mazeGame = new DataMazeGame(canvas, { ...sim.profile('laberinto-datos', starter), difficulty: 'medio' }, () => {});
 assert.strictEqual(typeof mazeGame.start, 'function', 'la posición inicial no debe ocultar el método que arranca el juego');
@@ -129,6 +154,11 @@ assert.deepStrictEqual(mazeGame.startPos, { x: 1, y: 1 });
 assert.strictEqual(mazeGame.packets.length, mazeGame.targetPackets);
 assert.ok(mazeGame.packets.every(pos => mazeGame.maze[pos.y][pos.x] === 0));
 assert.ok(mazeGame.viruses.every(pos => mazeGame.maze[pos.y][pos.x] === 0));
+assert.strictEqual('timeLeft' in mazeGame, false, 'el Laberinto no debe tener temporizador');
+mazeGame.ready = 0;
+mazeGame.viruses = [];
+mazeGame.update(100);
+assert.strictEqual(mazeGame.done, false, 'el Laberinto no debe terminar solo por pasar el tiempo');
 mazeGame.packets.splice(0, 5);
 assert.deepStrictEqual(mazeGame.result(true), {
   crashed: false, score: 60, won: true, packetsCollected: 5, totalPackets: 8
