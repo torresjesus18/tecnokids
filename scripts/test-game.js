@@ -77,6 +77,12 @@ assert.ok(easyRace.me.speed > 140, 'la velocidad base del jugador debe ser más 
 assert.ok(easyRace.L < 3200, 'la pista debe tomar menos tiempo en completarse');
 assert.ok(easyRace.bots.every((bot, i) => bot.base < normalRace.bots[i].base));
 assert.ok(normalRace.bots.every((bot, i) => bot.base < hardRace.bots[i].base));
+normalRace.onButton('right', 'pointerdown');
+normalRace.onButton('right', 'pointerup');
+assert.strictEqual(normalRace.me.lane, 2, 'un toque derecho debe cambiar un solo carril, no dos');
+normalRace.onButton('left', 'pointerdown');
+normalRace.onButton('left', 'pointerup');
+assert.strictEqual(normalRace.me.lane, 1, 'el toque izquierdo debe regresar un carril por toque');
 easyRace.objs = [{ d: 60, lane: 0, type: 'block', used: false }];
 const hardBot = hardRace.bots[0];
 hardRace.objs = [{ d: 60, lane: 0, type: 'block', used: false, botPassed: [false, false] }];

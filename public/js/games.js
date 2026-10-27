@@ -250,8 +250,8 @@ class RaceGame extends BaseGame {
     this.me.lane = x < this.me.x ? Math.max(0, this.me.lane - 1) : Math.min(2, this.me.lane + 1);
   }
   onButton(id, type) {
-    if (id === 'left') this.me.lane = Math.max(0, this.me.lane - 1);
-    else if (id === 'right') this.me.lane = Math.min(2, this.me.lane + 1);
+    if (id === 'left' && type === 'pointerdown') this.me.lane = Math.max(0, this.me.lane - 1);
+    else if (id === 'right' && type === 'pointerdown') this.me.lane = Math.min(2, this.me.lane + 1);
     else if (id === 'nitro') { this.me.nitroOn = type !== 'pointerup' && type !== 'pointercancel'; if (this.me.nitroOn) sfx('click'); }
   }
   onRelease() { this.me.nitroOn = false; }
