@@ -18,7 +18,7 @@ router.post('/auth/register', h(async (req, res) => {
   try {
     await client.query('BEGIN');
     const r = await client.query('INSERT INTO users (username, email, password_hash) VALUES ($1,$2,$3) RETURNING id', [username, email.toLowerCase(), hash]);
-    await client.query('INSERT INTO player_progress (user_id) VALUES ($1)', [r.rows[0].id]);
+    await client.query('INSERT INTO player_progress (user_id, coins) VALUES ($1, 20)', [r.rows[0].id]);
     await client.query('COMMIT');
     req.session.userId = r.rows[0].id;
     res.status(201).json({ username });

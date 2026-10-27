@@ -20,8 +20,6 @@ const SPIN_PRIZES = [
   { name: '50 monedas', icon: '💎', coins: 50, weight: 6 },
   { name: '80 monedas', icon: '🏆', coins: 80, weight: 2 }
 ];
-const freeSpinIn = last => Math.max(0, FREE_SPIN_MS - (Date.now() - (last ? new Date(last).getTime() : 0)));
-
 class ProgressService {
   constructor() { this.rewards = new RewardManager(); this.sim = new ComputerSimulator(parts, games); }
 
@@ -138,9 +136,11 @@ class ProgressService {
 
   // Estado de la ruleta: los premios que dibuja el frontend y si toca giro gratis.
   async roulette(userId) {
-    const p = (await pool.query('SELECT coins, last_free_spin FROM player_progress WHERE user_id=$1', [userId])).rows[0];
+    const p = (await pool.query(
+      `SELECT coins, GREATEST(0, $2 - COALESCE(EXTRACT(EPOCH FROM (now() - last_free_spin)) * 1000, $2))::bigint AS free_spin_in
+       FROM player_progress WHERE user_id=$1`, [userId, FREE_SPIN_MS])).rows[0];
     if (!p) throw fail('No encontramos tu progreso');
-    const restante = freeSpinIn(p.last_free_spin);
+    const restante = Number(p.free_spin_in);
     return {
       prizes: SPIN_PRIZES.map(({ name, icon }) => ({ name, icon })),
       cost: SPIN_COST, coins: p.coins, free: restante === 0, nextFreeIn: restante
@@ -152,23 +152,30 @@ class ProgressService {
     const c = await pool.connect();
     try {
       await c.query('BEGIN');
-      const p = (await c.query('SELECT coins, last_free_spin FROM player_progress WHERE user_id=$1 FOR UPDATE', [userId])).rows[0];
+      const p = (await c.query(
+        `SELECT coins, GREATEST(0, $2 - COALESCE(EXTRACT(EPOCH FROM (now() - last_free_spin)) * 1000, $2))::bigint AS free_spin_in
+         FROM player_progress WHERE user_id=$1 FOR UPDATE`, [userId, FREE_SPIN_MS])).rows[0];
       if (!p) throw fail('No encontramos tu progreso');
-      const restante = freeSpinIn(p.last_free_spin), free = restante === 0;
+      const restante = Number(p.free_spin_in), free = restante === 0;
       if (!free && p.coins < SPIN_COST) throw fail(`Te faltan monedas: cada giro cuesta ${SPIN_COST} 🪙 y el giro gratis todavía no vuelve.`);
       const total = SPIN_PRIZES.reduce((s, x) => s + x.weight, 0);
       let r = Math.random() * total, index = 0;
       while (index < SPIN_PRIZES.length - 1 && r >= SPIN_PRIZES[index].weight) { r -= SPIN_PRIZES[index].weight; index++; }
       const prize = SPIN_PRIZES[index];
       const coins = p.coins - (free ? 0 : SPIN_COST) + prize.coins;
-      // El temporizador del giro gratis solo se reinicia cuando el giro sí fue gratis.
-      await c.query('UPDATE player_progress SET coins=$2, last_free_spin=$3, updated_at=now() WHERE user_id=$1',
-        [userId, coins, free ? new Date() : p.last_free_spin]);
+      if (free) {
+        await c.query('UPDATE player_progress SET coins=$2, last_free_spin=now(), updated_at=now() WHERE user_id=$1',
+          [userId, coins]);
+      } else {
+        await c.query('UPDATE player_progress SET coins=$2, updated_at=now() WHERE user_id=$1',
+          [userId, coins]);
+      }
       const newAchievements = await this._unlock(c, userId, ['afortunado']);
       await c.query('COMMIT');
       return {
-        index, free, cost: free ? 0 : SPIN_COST, coins, newAchievements,
-        prize: { name: prize.name, icon: prize.icon, coins: prize.coins }, nextFreeIn: free ? FREE_SPIN_MS : restante
+        index, free, cost: free ? 0 : SPIN_COST, nextCost: SPIN_COST, coins, newAchievements,
+        prize: { name: prize.name, icon: prize.icon, coins: prize.coins },
+        nextFreeIn: free ? FREE_SPIN_MS : restante
       };
     } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
   }

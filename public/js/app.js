@@ -165,9 +165,10 @@ function initRoulette() {
       wheelWrap.classList.remove('spinning');
       sm.playSound('win'); confetti(wheelWrap);
       msg.textContent = `${r.prize.icon} ¡Ganaste ${r.prize.name}!`;
-      state.textContent = `Ahora tienes ${r.coins} 🪙` + (r.free ? ` · Giro gratis en ${wait(r.nextFreeIn)}` : '')
+      state.textContent = `Ahora tienes ${r.coins} 🪙 · Giro gratis en ${wait(r.nextFreeIn)}`
         + r.newAchievements.map(a => ` · ${a.icon} Insignia nueva: ${a.name}`).join('');
-      go.textContent = `Girar ${r.cost} 🪙`; go.disabled = r.coins < r.cost;
+      go.textContent = `Girar ${r.nextCost} 🪙`;
+      go.disabled = r.coins < r.nextCost;
     };
     raf = requestAnimationFrame(anim);
   };
@@ -211,15 +212,24 @@ function viewAuth(start) {
   show(`<div class="row justify-content-center"><div class="col-md-8 col-lg-6"><div class="panel">
     <ul class="nav nav-pills mb-3" role="tablist"><li class="nav-item"><button class="nav-link active" id="t-login" type="button">Ya tengo cuenta</button></li>
     <li class="nav-item"><button class="nav-link" id="t-reg" type="button">Soy nuevo</button></li></ul>
-    <form id="f" novalidate></form><div id="msg"></div></div></div></div>`);
+    <form id="f"></form><div id="msg"></div></div></div></div>`);
   const f = document.querySelector('#f');
   let mode = start === 'registro' ? 'reg' : 'login';
   const draw = () => {
-    f.innerHTML = `${mode === 'reg' ? `<label class="form-label fw-bold" for="u">Tu alias (no uses tu nombre real)</label><input class="form-control mb-3" id="u" maxlength="20" autocomplete="username">` : ''}
-      <label class="form-label fw-bold" for="e">Correo</label><input class="form-control mb-3" id="e" type="email" autocomplete="email">
-      <label class="form-label fw-bold" for="p">Contraseña (mínimo 8 caracteres)</label><input class="form-control mb-3" id="p" type="password" autocomplete="${mode === 'reg' ? 'new-password' : 'current-password'}">
+    f.innerHTML = `${mode === 'reg' ? `<label class="form-label fw-bold" for="u">Tu alias (no uses tu nombre real)</label><input class="form-control mb-3" id="u" maxlength="20" minlength="3" pattern="[A-Za-z0-9_]{3,20}" title="Usa de 3 a 20 letras, números o guion bajo." required autocomplete="username">` : ''}
+      <label class="form-label fw-bold" for="e">Correo</label><input class="form-control mb-3" id="e" type="email" maxlength="120" required autocomplete="email">
+      <label class="form-label fw-bold" for="p">Contraseña (mínimo 8 caracteres)</label>
+      <div class="input-group mb-3"><input class="form-control" id="p" type="password" minlength="8" maxlength="72" required autocomplete="${mode === 'reg' ? 'new-password' : 'current-password'}">
+        <button class="btn btn-outline-secondary" id="toggle-password" type="button" aria-controls="p" aria-pressed="false">👁 Mostrar</button></div>
       <button class="btn btn-tk w-100" type="submit">${mode === 'reg' ? 'Crear mi cuenta' : 'Entrar'}</button>
       <p class="text-center mt-3 mb-0">${mode === 'reg' ? '¿Ya tienes cuenta?' : '¿Primera vez aquí?'} <a href="#" id="sw" class="fw-bold">${mode === 'reg' ? 'Entra aquí' : 'Crea tu cuenta'}</a></p>`;
+    document.querySelector('#toggle-password').onclick = e => {
+      const input = document.querySelector('#p');
+      const visible = input.type === 'password';
+      input.type = visible ? 'text' : 'password';
+      e.currentTarget.textContent = visible ? '🙈 Ocultar' : '👁 Mostrar';
+      e.currentTarget.setAttribute('aria-pressed', String(visible));
+    };
     document.querySelector('#sw').onclick = e => { e.preventDefault(); mode = mode === 'reg' ? 'login' : 'reg'; draw(); };
     document.querySelector('#t-login').classList.toggle('active', mode === 'login');
     document.querySelector('#t-reg').classList.toggle('active', mode === 'reg');
