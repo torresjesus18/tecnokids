@@ -36,9 +36,14 @@ class BaseGame {
       const b = this._btnAt(x, y);
       if (b) { if (e.type === 'pointerdown') this.onButton(b.id, e.type); return; }
       this.targetX = x;
-      this.onPointer(x, e.type, y);
+      this.onPointer(x, e.type, y, e);
     };
-    this._pu = e => { const [x, y] = this._xy(e); const b = this._btnAt(x, y); if (b) this.onButton(b.id, e.type); this.onRelease(); };
+    this._pu = e => {
+      const [x, y] = e.type === 'pointerup' ? this._xy(e) : [NaN, NaN];
+      const b = e.type === 'pointerup' ? this._btnAt(x, y) : null;
+      if (b) this.onButton(b.id, e.type);
+      this.onRelease(e, x, y);
+    };
   }
   onKey() {}
   onPointer() {}
@@ -119,14 +124,17 @@ class BaseGame {
     this.cv.style.touchAction = 'none';            // el dedo mueve el personaje, no la página
     this.cv.addEventListener('pointerdown', this._pt); this.cv.addEventListener('pointermove', this._pt);
     this.cv.addEventListener('pointerup', this._pu); this.cv.addEventListener('pointercancel', this._pu);
+    this.cv.addEventListener('lostpointercapture', this._pu);
     this.t0 = this.last = this.lastFrame = this.fpsT = performance.now();
     this.nextHitch = this.scheduleHitch(this.t0);
     this.raf = requestAnimationFrame(t => this.tick(t));
   }
   detach() {
+    this.onRelease();
     window.removeEventListener('keydown', this._kd); window.removeEventListener('keyup', this._ku);
     this.cv.removeEventListener('pointerdown', this._pt); this.cv.removeEventListener('pointermove', this._pt);
     this.cv.removeEventListener('pointerup', this._pu); this.cv.removeEventListener('pointercancel', this._pu);
+    this.cv.removeEventListener('lostpointercapture', this._pu);
   }
   stop() { this.dead = true; this.done = true; cancelAnimationFrame(this.raf); this.detach(); }
 
@@ -216,6 +224,414 @@ class BaseGame {
   }
 }
 
+const assemblySteps = [
+  { part: 'motherboard', title: 'Placa madre', message: 'Primero coloca la placa madre: conecta y comunica todas las piezas.' },
+  { part: 'cpu', title: 'Procesador', message: 'Instala el procesador: es el cerebro que ejecuta las instrucciones.' },
+  { part: 'thermal', title: 'Pasta térmica', message: 'Pon una gotita de pasta térmica sobre el procesador. No va en una ranura.' },
+  { part: 'ram', title: 'Memoria RAM', message: 'Añade memoria RAM para mantener abiertos varios programas a la vez.' },
+  { part: 'gpu', title: 'Tarjeta gráfica', message: 'Coloca la tarjeta gráfica en la ranura PCIe para dibujar juegos e imágenes.' },
+  { part: 'ssd-m2', title: 'SSD M.2', message: 'Instala el SSD M.2 para guardar archivos y cargar el sistema con rapidez.' }
+];
+
+const assemblyParts = [
+  { id: 'motherboard', label: 'Placa madre', src: 'placa-madre.webp' },
+  { id: 'cpu', label: 'Procesador', src: 'cpu.webp' },
+  { id: 'ram', label: 'Memoria RAM', src: 'ram.webp' },
+  { id: 'gpu', label: 'Tarjeta gráfica', src: 'gpu.webp' },
+  { id: 'ssd-m2', label: 'SSD M.2', src: 'ssd-m2.webp' },
+  { id: 'ssd-sata', label: 'SSD SATA', src: 'ssd-sata.webp' },
+  { id: 'thermal', label: 'Pasta térmica', src: 'pasta-termica.webp' }
+];
+
+// Valida el montaje paso a paso y convierte el tiempo y los errores en el puntaje final.
+class AssemblyWorkshopGame extends BaseGame {
+  constructor(...args) {
+    super(...args);
+    this.compact = this.W < 600;
+    this.timeLimitSec = this.p.timeLimitSec || { facil: 120, medio: 90, dificil: 60 }[this.p.difficulty] || 90;
+    this.ready = 0;
+    this.t = 0;
+    this.currentStep = 0;
+    this.installed = new Set();
+    this.errors = 0;
+    this.selectedPart = null;
+    this.draggingPart = null;
+    this.dragPoint = null;
+    this.slotTap = false;
+    this.activePointerId = null;
+    this.feedback = '';
+    this.feedbackType = '';
+    this.feedbackT = 0;
+    this.images = {};
+    this.imageErrors = new Set();
+    for (const part of assemblyParts) {
+      if (typeof Image === 'undefined') continue;
+      const image = new Image();
+      image.onerror = () => this.imageErrors.add(part.id);
+      image.src = `/img/ensamblaje/${part.src}`;
+      this.images[part.id] = image;
+    }
+    this.images.case = typeof Image === 'undefined' ? null : new Image();
+    if (this.images.case) {
+      this.images.case.onerror = () => this.imageErrors.add('case');
+      this.images.case.src = '/img/ensamblaje/gabinete-abierto.webp';
+    }
+  }
+
+  drawMonitor() {}
+
+  score() {
+    const timeBonus = Math.round(20 * Math.max(0, 1 - this.elapsed / this.timeLimitSec));
+    return Math.max(60, Math.min(100, 80 + timeBonus - this.errors * 5));
+  }
+
+  partCards() {
+    const desk = this.compact
+      ? { x: 12, y: 555, w: this.W - 24, h: 385 }
+      : { x: 16, y: 970, w: this.W - 32, h: 250 };
+    const columns = this.compact ? 2 : 4;
+    const cardW = this.compact ? 218 : 220;
+    const cardH = this.compact ? 92 : 108;
+    const rowCount = Math.ceil(assemblyParts.length / columns);
+    const rowGap = this.compact ? 10 : 8;
+    const titleSpace = 34;
+    const rowHeight = (desk.h - titleSpace - rowGap * (rowCount + 1)) / rowCount;
+    return assemblyParts.map((part, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      return {
+        ...part,
+        x: desk.x + (desk.w / columns) * (column + 0.5),
+        y: desk.y + titleSpace + rowGap + row * (rowHeight + rowGap) + rowHeight / 2,
+        w: Math.min(cardW, desk.w / columns - 8),
+        h: Math.min(cardH, rowHeight - 2)
+      };
+    });
+  }
+
+  caseBounds() {
+    const box = this.compact
+      ? { x: 10, y: 96, w: this.W - 20, h: 420 }
+      : { x: 12, y: 100, w: this.W - 24, h: 850 };
+    const ratio = 685 / 626;
+    const w = Math.min(box.w, box.h * ratio);
+    const h = w / ratio;
+    return { x: box.x + (box.w - w) / 2, y: box.y + (box.h - h) / 2, w, h };
+  }
+
+  boardBounds() {
+    const box = this.caseBounds();
+    return {
+      x: box.x + box.w * 0.18,
+      y: box.y + box.h * 0.22,
+      w: box.w * 0.52,
+      h: box.h * 0.55
+    };
+  }
+
+  slots() {
+    const board = this.boardBounds();
+    const cpu = { x: board.x + board.w * 0.43, y: board.y + board.h * 0.23, w: board.w * 0.2, h: board.h * 0.16 };
+    return {
+      motherboard: board,
+      cpu,
+      thermal: cpu,
+      ram: { x: board.x + board.w * 0.7, y: board.y + board.h * 0.1, w: board.w * 0.12, h: board.h * 0.49 },
+      gpu: { x: board.x + board.w * 0.14, y: board.y + board.h * 0.66, w: board.w * 0.66, h: board.h * 0.17 },
+      'ssd-m2': { x: board.x + board.w * 0.61, y: board.y + board.h * 0.83, w: board.w * 0.2, h: board.h * 0.09 }
+    };
+  }
+
+  contains(rect, x, y) {
+    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+  }
+
+  onPointer(x, type, y, event) {
+    if (this.done) return;
+    if (type === 'pointerdown') {
+      if (this.activePointerId !== null) return;
+      const card = this.partCards().find(part => !this.installed.has(part.id) && this.contains({
+        x: part.x - part.w / 2, y: part.y - part.h / 2, w: part.w, h: part.h
+      }, x, y));
+      if (card) {
+        this.selectedPart = card.id;
+        this.draggingPart = card.id;
+        this.dragPoint = { x, y };
+        this.activePointerId = event.pointerId;
+        if (typeof event.currentTarget.setPointerCapture === 'function') {
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }
+        return;
+      }
+      const slot = this.slots()[assemblySteps[this.currentStep].part];
+      this.slotTap = !!this.selectedPart && this.contains(slot, x, y);
+      if (this.slotTap) this.activePointerId = event.pointerId;
+    } else if (type === 'pointermove' && this.draggingPart && event.pointerId === this.activePointerId) {
+      this.dragPoint = { x, y };
+    }
+  }
+
+  onRelease(event, x, y) {
+    if (!this.draggingPart && !this.slotTap) return;
+    if (event && event.pointerId !== this.activePointerId) return;
+    if (!event || event.type !== 'pointerup' || !Number.isFinite(x) || !Number.isFinite(y)) {
+      this.cancelInteraction();
+      return;
+    }
+    const point = [x, y];
+    const part = this.draggingPart || this.selectedPart;
+    if (this.draggingPart && point) {
+      const card = this.partCards().find(item => item.id === part);
+      if (card && this.contains({
+        x: card.x - card.w / 2, y: card.y - card.h / 2, w: card.w, h: card.h
+      }, point[0], point[1])) {
+        this.draggingPart = null;
+        this.dragPoint = null;
+        this.slotTap = false;
+        this.activePointerId = null;
+        return;
+      }
+    }
+    this.draggingPart = null;
+    this.dragPoint = null;
+    this.slotTap = false;
+    this.activePointerId = null;
+    if (part && point) this.tryInstall(part, point[0], point[1]);
+  }
+
+  cancelInteraction() {
+    const pointerId = this.activePointerId;
+    this.draggingPart = null;
+    this.dragPoint = null;
+    this.slotTap = false;
+    this.activePointerId = null;
+    this.selectedPart = null;
+    if (pointerId != null && this.cv.hasPointerCapture?.(pointerId)) {
+      this.cv.releasePointerCapture(pointerId);
+    }
+  }
+
+  tryInstall(partId, x, y) {
+    if (this.done) return false;
+    const step = assemblySteps[this.currentStep];
+    const slot = this.slots()[step.part];
+    if (partId !== step.part || !this.contains(slot, x, y)) {
+      this.errors++;
+      this.feedback = partId !== step.part
+        ? partId === 'ssd-sata'
+          ? 'Ese es un SSD SATA; en este armado buscamos el M.2, que se conecta directo a la placa.'
+          : `Esa pieza no es la que necesitamos. ${step.message}`
+        : '¡Casi! Suelta la pieza sobre el espacio resaltado.';
+      this.feedbackType = 'error';
+      this.feedbackT = 1.1;
+      this.addShake(5, 0.2);
+      this.selectedPart = null;
+      return false;
+    }
+    this.installed.add(step.part);
+    this.currentStep++;
+    this.selectedPart = null;
+    this.feedback = this.currentStep === assemblySteps.length
+      ? '¡Listo! El computador quedó ensamblado.'
+      : `¡Encajó! ${assemblySteps[this.currentStep].message}`;
+    this.feedbackType = 'success';
+    this.feedbackT = 1.4;
+    this.addFloat(this.W * 0.5, this.H * 0.72, '¡Clic!', '#35e0b2');
+    if (this.currentStep === assemblySteps.length) {
+      this.end({
+        crashed: false,
+        won: true,
+        score: this.score(),
+        installed: this.installed.size,
+        elapsedSeconds: Math.floor(this.elapsed)
+      });
+    }
+    return true;
+  }
+
+  update(dt) {
+    this.t += dt;
+    this.feedbackT = Math.max(0, this.feedbackT - dt);
+    if (this.elapsed >= this.timeLimitSec) {
+      this.end({
+        crashed: false,
+        won: false,
+        timedOut: true,
+        score: Math.floor((this.installed.size / assemblySteps.length) * this.score()),
+        installed: this.installed.size,
+        elapsedSeconds: Math.floor(this.elapsed)
+      });
+    }
+  }
+
+  drawImage(c, id, rect, fit = 'contain') {
+    const image = this.images[id];
+    if (!image || !image.complete || !image.naturalWidth) return false;
+    const scale = fit === 'cover'
+      ? Math.max(rect.w / image.naturalWidth, rect.h / image.naturalHeight)
+      : Math.min(rect.w / image.naturalWidth, rect.h / image.naturalHeight);
+    const w = image.naturalWidth * scale, h = image.naturalHeight * scale;
+    c.drawImage(image, rect.x + (rect.w - w) / 2, rect.y + (rect.h - h) / 2, w, h);
+    return true;
+  }
+
+  drawText(c, text, x, y, maxWidth, lineHeight, maxLines) {
+    const words = text.split(/\s+/);
+    let line = '', lines = 0;
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (line && c.measureText(next).width > maxWidth) {
+        c.fillText(line, x, y + lines * lineHeight);
+        lines++;
+        line = word;
+        if (lines >= maxLines) return;
+      } else line = next;
+    }
+    if (line && lines < maxLines) c.fillText(line, x, y + lines * lineHeight);
+  }
+
+  drawPart(c, part, rect, isInstalled = false) {
+    if (part.id === 'thermal') return;
+    if (part.id === 'ram' && isInstalled) {
+      const image = this.images[part.id];
+      if (image?.complete && image.naturalWidth) {
+        c.save();
+        c.filter = 'grayscale(1)';
+        c.globalAlpha = 0.55;
+        c.translate(rect.x + rect.w / 2, rect.y + rect.h / 2);
+        c.rotate(Math.PI / 2);
+        const w = Math.min(rect.h, image.naturalWidth / image.naturalHeight * rect.w);
+        c.drawImage(image, -w / 2, -rect.w / 2, w, rect.w);
+        c.restore();
+        return;
+      }
+    }
+    this.drawImage(c, part.id, rect);
+  }
+
+  render(c) {
+    const W = this.W, H = this.H, desk = this.compact
+      ? { x: 12, y: 555, w: W - 24, h: 385 }
+      : { x: 16, y: 970, w: W - 32, h: 250 };
+    const caseBox = this.caseBounds(), board = this.boardBounds(), slots = this.slots();
+    c.fillStyle = '#d8f4ff'; c.fillRect(0, 0, W, H);
+    c.fillStyle = '#0c5374'; c.textAlign = 'left'; c.textBaseline = 'middle';
+    c.font = `900 ${this.compact ? 24 : 30}px sans-serif`;
+    c.fillText('🛠️ TALLER DE ENSAMBLAJE', 22, 38);
+    c.fillStyle = '#17526b'; c.font = `bold ${this.compact ? 15 : 17}px sans-serif`;
+    c.fillText(`Piezas instaladas: ${this.installed.size}/${assemblySteps.length}`, 24, 70);
+    const remaining = Math.max(0, Math.ceil(this.timeLimitSec - this.elapsed));
+    c.fillStyle = remaining <= 15 ? '#b4233a' : '#17526b';
+    c.textAlign = 'right';
+    c.font = `bold ${this.compact ? 15 : 17}px sans-serif`;
+    c.fillText(`⏱ ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`, W - 24, 70);
+
+    c.fillStyle = '#b7dce8'; c.strokeStyle = '#43849a'; c.lineWidth = 3;
+    c.beginPath();
+    if (c.roundRect) c.roundRect(caseBox.x, caseBox.y, caseBox.w, caseBox.h, 12);
+    else c.rect(caseBox.x, caseBox.y, caseBox.w, caseBox.h);
+    c.fill(); c.stroke();
+    this.drawImage(c, 'case', caseBox);
+    if (this.installed.has('motherboard')) this.drawImage(c, 'motherboard', board);
+
+    for (const step of assemblySteps) {
+      if (!this.installed.has(step.part) || step.part === 'motherboard') continue;
+      this.drawPart(c, assemblyParts.find(part => part.id === step.part), slots[step.part], true);
+    }
+
+    const currentPart = assemblySteps[this.currentStep]?.part;
+    for (const [partId, slot] of Object.entries(slots)) {
+      if (partId !== currentPart || this.installed.has(partId)) continue;
+      c.save();
+      c.fillStyle = this.feedbackT && this.feedbackType === 'error' ? 'rgba(255,107,129,.2)' : 'rgba(53,224,178,.28)';
+      c.strokeStyle = this.feedbackT && this.feedbackType === 'error' ? '#e33e5e' : '#168460';
+      c.lineWidth = 4;
+      c.setLineDash([8, 5]);
+      c.fillRect(slot.x, slot.y, slot.w, slot.h);
+      c.strokeRect(slot.x, slot.y, slot.w, slot.h);
+      c.restore();
+    }
+    if (this.installed.has('thermal')) {
+      const cpu = slots.cpu;
+      c.fillStyle = '#d7c08d';
+      c.beginPath();
+      c.ellipse(cpu.x + cpu.w / 2, cpu.y + cpu.h / 2, Math.max(3, cpu.w * 0.12), Math.max(2, cpu.h * 0.1), 0, 0, Math.PI * 2);
+      c.fill();
+    }
+
+    c.fillStyle = '#d59a62'; c.strokeStyle = '#975d34'; c.lineWidth = 3;
+    c.beginPath();
+    if (c.roundRect) c.roundRect(desk.x, desk.y, desk.w, desk.h, 18);
+    else c.rect(desk.x, desk.y, desk.w, desk.h);
+    c.fill(); c.stroke();
+    c.fillStyle = '#5d351e'; c.textAlign = 'left'; c.font = `900 ${this.compact ? 17 : 20}px sans-serif`;
+    c.fillText('MESA DE PIEZAS', desk.x + 16, desk.y + 19);
+    for (const part of this.partCards()) {
+      const rect = { x: part.x - part.w / 2, y: part.y - part.h / 2, w: part.w, h: part.h };
+      const installed = this.installed.has(part.id);
+      const selected = this.selectedPart === part.id;
+      c.fillStyle = installed ? '#d9d8d2' : selected ? '#fff0bf' : '#f8ead8';
+      c.strokeStyle = installed ? '#aaa9a1' : selected ? '#ca9b00' : '#bd8856';
+      c.lineWidth = selected ? 4 : 2;
+      c.beginPath();
+      if (c.roundRect) c.roundRect(rect.x, rect.y, rect.w, rect.h, 10);
+      else c.rect(rect.x, rect.y, rect.w, rect.h);
+      c.fill(); c.stroke();
+      const imageRect = this.compact
+        ? { x: rect.x + 8, y: rect.y + 6, w: rect.w * 0.56, h: rect.h - 12 }
+        : { x: rect.x + 8, y: rect.y + 6, w: rect.w - 16, h: rect.h - 30 };
+      if (installed) {
+        c.save(); c.globalAlpha = 0.42; c.filter = 'grayscale(1)';
+        this.drawImage(c, part.id, imageRect);
+        c.restore();
+      } else this.drawImage(c, part.id, imageRect);
+      c.fillStyle = '#392615'; c.textAlign = this.compact ? 'left' : 'center';
+      c.font = `bold ${this.compact ? 12 : 13}px sans-serif`;
+      c.fillText(part.label, this.compact ? rect.x + rect.w * 0.6 : part.x, this.compact ? part.y : rect.y + rect.h - 10, this.compact ? rect.w * 0.37 : rect.w - 8);
+      if (installed) {
+        c.fillStyle = '#168460';
+        c.beginPath(); c.arc(rect.x + rect.w - 12, rect.y + 12, 10, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#fff'; c.font = 'bold 13px sans-serif'; c.textAlign = 'center';
+        c.fillText('✓', rect.x + rect.w - 12, rect.y + 12);
+      }
+    }
+    if (this.draggingPart && this.dragPoint) {
+      const part = assemblyParts.find(item => item.id === this.draggingPart);
+      this.drawImage(c, part.id, { x: this.dragPoint.x - 42, y: this.dragPoint.y - 32, w: 84, h: 64 });
+    }
+
+    const panelY = this.compact ? 955 : 1235;
+    const panelH = H - panelY - 16;
+    c.fillStyle = 'rgba(255,255,255,.92)'; c.strokeStyle = '#4f9bb2'; c.lineWidth = 2;
+    c.beginPath();
+    if (c.roundRect) c.roundRect(16, panelY, W - 32, panelH, 14);
+    else c.rect(16, panelY, W - 32, panelH);
+    c.fill(); c.stroke();
+    c.fillStyle = this.feedbackT > 0
+      ? this.feedbackType === 'error' ? '#a51d35' : '#168460'
+      : '#153f54';
+    c.textAlign = 'left'; c.font = `bold ${this.compact ? 14 : 16}px sans-serif`;
+    const step = assemblySteps[this.currentStep];
+    const message = this.feedbackT > 0 ? this.feedback : step?.message || '¡Ensamblaje terminado!';
+    this.drawText(c, `🤖 Byte: ${message}`, 30, panelY + 24, this.compact ? W - 60 : W * 0.52, this.compact ? 18 : 21, 2);
+    c.fillStyle = '#567080'; c.font = `bold ${this.compact ? 12 : 14}px sans-serif`;
+    this.drawText(c, 'El SSD SATA es distractor. ¡Termina rápido y evita errores para ganar más monedas!', 30, panelY + panelH - (this.compact ? 38 : 20), W - 60, this.compact ? 16 : 18, 2);
+    const progressX = this.compact ? 30 : 590;
+    const progressW = this.compact ? W - 60 : W - progressX - 30;
+    const progressY = this.compact ? panelY + 72 : panelY + 52;
+    c.fillStyle = '#d7e3e8'; c.fillRect(progressX, progressY, progressW, 16);
+    c.fillStyle = '#35b88f'; c.fillRect(progressX, progressY, progressW * this.installed.size / assemblySteps.length, 16);
+    c.fillStyle = '#153f54'; c.font = 'bold 12px sans-serif'; c.textAlign = 'center';
+    c.fillText(`${Math.round(this.installed.size / assemblySteps.length * 100)}%`, progressX + progressW / 2, progressY + 8);
+
+    if (this.imageErrors.size) {
+      c.fillStyle = '#a51d35'; c.textAlign = 'center'; c.font = 'bold 14px sans-serif';
+      c.fillText('No se pudo cargar una imagen del taller. Revisa public/img/ensamblaje/.', W / 2, H - 8);
+    }
+  }
+}
+
+// Carrera por carriles: la dificultad ajusta el ritmo y la capacidad de los robots para esquivar.
 class RaceGame extends BaseGame {
   constructor(...a) {
     super(...a);
@@ -387,6 +803,7 @@ class RaceGame extends BaseGame {
   }
 }
 
+// Shooter de oleadas con mejoras y superbomba vinculadas al rendimiento simulado del PC.
 class DefenseGame extends BaseGame {
   constructor(...a) {
     super(...a);
@@ -621,6 +1038,7 @@ const catcherModes = {
   dificil: { fall: 220, spawn: 0.9, traps: 0.45, targets: ['cpu', 'ram', 'gpu', 'entrada', 'salida', 'almacenamiento'], short: '¡Cambia de objetivo y esquiva!' }
 };
 
+// Clasifica piezas que caen: el objetivo cambia y los power-ups afectan temporalmente la partida.
 class CatcherGame extends BaseGame {
   constructor(...a) {
     super(...a);
@@ -851,6 +1269,7 @@ const guardianModes = {
 const guardianBugs = [{ icon: '🦠', name: 'virus' }, { icon: '👾', name: 'malware' }, { icon: '🧟', name: 'troyano' }];
 const guardianBoss = { icon: '👹', name: 'virus jefe' };
 
+// Defensa por toques: los virus atacan el núcleo y avanzan en oleadas hasta el jefe.
 class GuardianGame extends BaseGame {
   constructor(...a) {
     super(...a);
@@ -1046,6 +1465,7 @@ const diskShapes = [
 ];
 const diskIcons = ['📷', '🎬', '📁', '🎵'];
 
+// Puzzle de bloques: RAM define el tablero y ROM el ritmo de caída de las piezas.
 class DiskOrganizerGame extends BaseGame {
   constructor(...args) {
     super(...args);
@@ -1383,4 +1803,333 @@ class DataMazeGame extends BaseGame {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = { BaseGame, RaceGame, DefenseGame, CatcherGame, GuardianGame, DiskOrganizerGame, DataMazeGame };
+// Carrera de renderizado: los núcleos suben el rendimiento y el polvo acumula calor al chocar.
+class GpuRenderGame extends BaseGame {
+  constructor(...args) {
+    super(...args);
+    this.mode = this.p.renderMode || ((this.p.componentLevels.gpu || 1) >= 3 ? 'rtx' : 'retro');
+    this.rtx = this.mode === 'rtx';
+    this.baseFps = this.rtx ? 144 : 30;
+    this.difficulty = {
+      facil: { speed: 130, distance: 4550, spawn: 1.05 },
+      medio: { speed: 150, distance: 6600, spawn: 0.85 },
+      dificil: { speed: 170, distance: 9350, spawn: 0.68 }
+    }[this.p.difficulty] || { speed: 150, distance: 6600, spawn: 0.85 };
+    this.trackTop = 100;
+    this.player = { x: this.W / 2, y: this.H - 88 };
+    this.stars = Array.from({ length: 42 }, (_, i) => ({
+      x: (i * 83 + 29) % this.W,
+      y: (i * 137 + 17) % this.H,
+      size: i % 5 === 0 ? 2 : 1,
+      alpha: 0.35 + (i % 4) * 0.14
+    }));
+    this.ready = 3;
+    this.resetRun();
+  }
+
+  resetRun() {
+    this.distance = 0;
+    this.cores = 0;
+    this.hits = 0;
+    this.lives = 3;
+    this.temperature = 55;
+    this.speed = this.difficulty.speed;
+    this.fps = this.baseFps;
+    this.targets = [];
+    this.particles = [];
+    this.spawnT = 0.8;
+    this.boostT = 0;
+    this.slowT = 0;
+    this.damageT = 0;
+    this.t = 0;
+    this.pointerTarget = null;
+    this.player.x = this.W / 2;
+    this.player.y = this.H - 88;
+    this.keys = {};
+  }
+
+  onPointer(x, type, y, event) {
+    if (type === 'pointermove' && event?.buttons === 0) return;
+    if (type === 'pointerdown' || type === 'pointermove') {
+      if (type === 'pointerdown' && event?.currentTarget?.setPointerCapture) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
+      this.pointerTarget = {
+        x: Math.max(28, Math.min(this.W - 28, x)),
+        y: Math.max(this.trackTop + 40, Math.min(this.H - 58, y))
+      };
+    }
+  }
+
+  onRelease() { this.pointerTarget = null; }
+
+  restartLevel() {
+    if (this.done) return;
+    const now = performance.now();
+    this.resetRun();
+    this.ready = 3;
+    this.elapsed = 0;
+    this.t0 = this.last = this.lastFrame = this.fpsT = now;
+    this.nextHitch = this.scheduleHitch(now);
+    this.hitchUntil = 0;
+    this.floats = [];
+    this.shakeT = 0;
+  }
+
+  score() {
+    return Math.max(0, Math.min(100, Math.round(
+      this.distance / this.difficulty.distance * 70 + this.cores * 5 - this.hits * 8
+    )));
+  }
+
+  spawnTarget() {
+    const margin = 34;
+    this.targets.push({
+      type: Math.random() < 0.62 ? 'core' : 'dust',
+      x: margin + Math.random() * (this.W - margin * 2),
+      y: this.trackTop - 24,
+      spin: Math.random() * Math.PI * 2
+    });
+  }
+
+  addCoreBurst(x, y) {
+    if (!this.rtx) return;
+    for (let i = 0; i < 10; i++) {
+      const angle = Math.PI * 2 * i / 10;
+      this.particles.push({
+        x, y, vx: Math.cos(angle) * (35 + Math.random() * 65),
+        vy: Math.sin(angle) * (35 + Math.random() * 65),
+        life: 0.45 + Math.random() * 0.3,
+        color: ['#35e0b2', '#5ad1ff', '#ff4fc8'][i % 3]
+      });
+    }
+  }
+
+  finish(won) {
+    this.end({
+      crashed: false,
+      won,
+      score: this.score(),
+      cores: this.cores,
+      distance: Math.floor(this.distance),
+      hits: this.hits,
+      temperature: this.temperature,
+      renderMode: this.mode
+    });
+  }
+
+  update(dt) {
+    this.t += dt;
+    if (this.ready > 0) {
+      this.ready = Math.max(0, this.ready - dt);
+      return;
+    }
+
+    this.boostT = Math.max(0, this.boostT - dt);
+    this.slowT = Math.max(0, this.slowT - dt);
+    this.damageT = Math.max(0, this.damageT - dt);
+    this.speed = this.difficulty.speed * (this.boostT > 0 ? 1.35 : 1) * (this.slowT > 0 ? 0.62 : 1);
+    const fpsChange = this.cores * (this.rtx ? 10 : 4) - this.hits * (this.rtx ? 24 : 8);
+    this.fps = Math.max(this.rtx ? 45 : 12, Math.min(this.rtx ? 240 : 60, this.baseFps + fpsChange));
+
+    const moveSpeed = 300 + (this.p.componentLevels.gpu || 1) * 18;
+    if (this.pointerTarget) {
+      const dx = this.pointerTarget.x - this.player.x, dy = this.pointerTarget.y - this.player.y;
+      const distance = Math.hypot(dx, dy), step = moveSpeed * dt;
+      if (distance <= step) {
+        this.player.x = this.pointerTarget.x;
+        this.player.y = this.pointerTarget.y;
+      } else {
+        this.player.x += dx / distance * step;
+        this.player.y += dy / distance * step;
+      }
+    } else {
+      const dx = (this.keys.arrowright || this.keys.d ? 1 : 0) - (this.keys.arrowleft || this.keys.a ? 1 : 0);
+      const dy = (this.keys.arrowdown || this.keys.s ? 1 : 0) - (this.keys.arrowup || this.keys.w ? 1 : 0);
+      this.player.x += dx * moveSpeed * dt;
+      this.player.y += dy * moveSpeed * dt;
+    }
+    this.player.x = Math.max(28, Math.min(this.W - 28, this.player.x));
+    this.player.y = Math.max(this.trackTop + 34, Math.min(this.H - 58, this.player.y));
+
+    this.distance += this.speed * dt;
+    this.spawnT -= dt;
+    if (this.spawnT <= 0) {
+      this.spawnTarget();
+      this.spawnT += this.difficulty.spawn;
+    }
+    this.stars.forEach(star => {
+      star.y += this.speed * dt * 0.42;
+      if (star.y > this.H) star.y = this.trackTop;
+    });
+
+    for (let i = this.targets.length - 1; i >= 0; i--) {
+      const target = this.targets[i];
+      target.y += this.speed * dt * 0.92;
+      target.spin += dt * 2.4;
+      if (Math.abs(target.x - this.player.x) < 28 && Math.abs(target.y - this.player.y) < 32) {
+        this.targets.splice(i, 1);
+        if (target.type === 'core') {
+          this.cores++;
+          this.boostT = 2.2;
+          this.addCoreBurst(target.x, target.y);
+          this.addFloat(target.x, target.y, '⚡ +FPS', '#5ad1ff');
+          sfx('star');
+        } else {
+          this.hits++;
+          this.lives--;
+          this.temperature = Math.min(100, this.temperature + 15);
+          this.slowT = 1.8;
+          this.damageT = 0.45;
+          this.addShake(7, 0.28);
+          this.addFloat(target.x, target.y, '¡CALOR +15°!', '#ff9b54');
+          sfx('wrong');
+          if (this.lives <= 0) {
+            this.temperature = 100;
+            this.finish(false);
+            return;
+          }
+        }
+      } else if (target.y > this.H + 30) this.targets.splice(i, 1);
+    }
+
+    this.particles = this.particles.filter(particle => {
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+      particle.life -= dt;
+      return particle.life > 0;
+    });
+    if (this.distance >= this.difficulty.distance) this.finish(true);
+  }
+
+  drawRetroBackground(c) {
+    c.fillStyle = '#101a3c'; c.fillRect(0, 0, this.W, this.H);
+    c.fillStyle = '#192852'; c.fillRect(12, this.trackTop, this.W - 24, this.H - this.trackTop);
+    c.fillStyle = '#34436d';
+    for (let x = 25; x < this.W; x += 54) c.fillRect(x, this.trackTop, 2, this.H - this.trackTop);
+    c.fillStyle = '#c9d2ec';
+    this.stars.forEach(star => c.fillRect(star.x, star.y, star.size + 1, star.size + 1));
+  }
+
+  drawRtxBackground(c) {
+    const gradient = c.createLinearGradient(0, 0, 0, this.H);
+    gradient.addColorStop(0, '#111344');
+    gradient.addColorStop(1, '#071d3b');
+    c.fillStyle = gradient; c.fillRect(0, 0, this.W, this.H);
+    c.save();
+    c.shadowBlur = 12; c.shadowColor = '#5ad1ff'; c.strokeStyle = 'rgba(90,209,255,.2)'; c.lineWidth = 1;
+    for (let x = 24; x < this.W; x += 54) {
+      c.beginPath(); c.moveTo(x, this.trackTop); c.lineTo(x, this.H); c.stroke();
+    }
+    const offset = (this.distance * 0.3) % 42;
+    for (let y = this.trackTop + offset; y < this.H; y += 42) {
+      c.beginPath(); c.moveTo(12, y); c.lineTo(this.W - 12, y); c.stroke();
+    }
+    c.restore();
+    this.stars.forEach(star => {
+      c.globalAlpha = star.alpha; c.fillStyle = '#c5fbff';
+      c.fillRect(star.x, star.y, star.size, star.size);
+    });
+    c.globalAlpha = 1;
+  }
+
+  drawRocket(c) {
+    const { x, y } = this.player;
+    c.save();
+    c.translate(x, y);
+    if (this.rtx) {
+      c.rotate(Math.sin(this.t * 6) * 0.04);
+      c.shadowBlur = 20; c.shadowColor = '#35e0b2';
+      c.fillStyle = this.boostT > 0 ? '#ff4fc8' : '#35e0b2';
+      c.beginPath(); c.moveTo(0, -30); c.lineTo(18, -6); c.lineTo(15, 20); c.lineTo(0, 27); c.lineTo(-15, 20); c.lineTo(-18, -6); c.closePath(); c.fill();
+      c.shadowBlur = 0;
+      c.fillStyle = '#d9fbff';
+      c.beginPath(); c.moveTo(0, -21); c.lineTo(8, -5); c.lineTo(0, 2); c.lineTo(-8, -5); c.closePath(); c.fill();
+      c.fillStyle = '#20275e';
+      [-8, 8].forEach(fanX => {
+        c.beginPath(); c.arc(fanX, 10, 5, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = '#a8fff0'; c.lineWidth = 1.5;
+        c.beginPath(); c.moveTo(fanX - 3, 10); c.lineTo(fanX + 3, 10); c.moveTo(fanX, 7); c.lineTo(fanX, 13); c.stroke();
+      });
+      c.fillStyle = '#ffcf33';
+      c.beginPath(); c.moveTo(-8, 23); c.lineTo(0, 39 + Math.sin(this.t * 20) * 4); c.lineTo(8, 23); c.closePath(); c.fill();
+    } else {
+      c.fillStyle = '#43d8b0'; c.fillRect(-10, -20, 20, 43);
+      c.fillStyle = '#e2efff'; c.fillRect(-6, -29, 12, 12);
+      c.fillStyle = '#ffcf33'; c.fillRect(-6, 23, 12, 12);
+      c.fillStyle = '#ff6b81'; c.fillRect(-18, 8, 8, 12); c.fillRect(10, 8, 8, 12);
+      c.fillStyle = '#24336b'; c.fillRect(-5, 2, 4, 4); c.fillRect(2, 2, 4, 4);
+    }
+    c.restore();
+  }
+
+  drawTarget(c, target) {
+    c.save();
+    c.translate(target.x, target.y);
+    if (target.type === 'core') {
+      if (this.rtx) {
+        c.rotate(target.spin);
+        c.shadowBlur = 16; c.shadowColor = '#ffcf33';
+        c.fillStyle = '#ffcf33'; c.fillRect(-12, -12, 24, 24);
+        c.shadowBlur = 0; c.fillStyle = '#fff6b8'; c.fillRect(-5, -5, 10, 10);
+      } else {
+        c.fillStyle = '#ffe66d'; c.fillRect(-10, -10, 20, 20);
+        c.fillStyle = '#fff'; c.fillRect(-4, -4, 8, 8);
+      }
+    } else {
+      c.rotate(Math.sin(target.spin) * 0.08);
+      c.fillStyle = '#a8b2c4';
+      c.beginPath(); c.arc(0, 0, 19, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#263650';
+      c.beginPath(); c.arc(0, 0, 15, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#b7c5d8';
+      for (let blade = 0; blade < 4; blade++) {
+        c.save(); c.rotate(blade * Math.PI / 2 + target.spin);
+        c.beginPath(); c.ellipse(0, -7, 4, 7, 0, 0, Math.PI * 2); c.fill();
+        c.restore();
+      }
+      c.fillStyle = '#e3b46d';
+      c.beginPath(); c.arc(0, 0, 3, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#d9c3a0';
+      c.fillRect(-20, -23, 5, 4); c.fillRect(15, 16, 6, 4); c.fillRect(17, -17, 4, 4);
+    }
+    c.restore();
+  }
+
+  render(c) {
+    c.save();
+    c.imageSmoothingEnabled = this.rtx;
+    if (this.rtx) this.drawRtxBackground(c);
+    else this.drawRetroBackground(c);
+    if (this.rtx) {
+      this.particles.forEach(particle => {
+        c.globalAlpha = Math.min(1, particle.life * 2);
+        c.fillStyle = particle.color; c.fillRect(particle.x, particle.y, 4, 4);
+      });
+      c.globalAlpha = 1;
+    }
+    this.targets.forEach(target => this.drawTarget(c, target));
+    this.drawRocket(c);
+
+    c.fillStyle = this.rtx ? 'rgba(11,14,54,.88)' : '#090f29';
+    c.fillRect(0, 0, this.W, 88);
+    c.textAlign = 'left'; c.textBaseline = 'middle';
+    c.fillStyle = '#fff'; c.font = 'bold 14px sans-serif'; c.fillText('DESAFÍO DE RENDERIZADO GPU', 16, 18);
+    c.fillStyle = this.rtx ? '#78f5ff' : '#ffe66d'; c.font = 'bold 24px sans-serif';
+    c.fillText(`⚡ ${this.fps} FPS`, 16, 50);
+    c.fillStyle = '#fff'; c.font = 'bold 16px sans-serif';
+    c.textAlign = 'right'; c.fillText(`Núcleos ${this.cores}  ·  🌡️ ${this.temperature}°C`, this.W - 16, 50);
+    this.hudBar(c, 16, 73, this.W - 32, 7, this.distance / this.difficulty.distance,
+      this.rtx ? '#35e0b2' : '#ffcf33', 'rgba(255,255,255,.2)');
+    c.fillStyle = '#d7e5ff'; c.font = '12px sans-serif'; c.textAlign = 'center';
+    c.fillText(`${Math.min(100, Math.floor(this.distance / this.difficulty.distance * 100))}% de pista`, this.W / 2, 96);
+    c.restore();
+
+    if (this.damageT > 0) {
+      c.save(); c.globalAlpha = Math.min(0.35, this.damageT * 0.8); c.fillStyle = '#ff274f'; c.fillRect(0, 0, this.W, this.H); c.restore();
+    }
+    if (!this.done && this.ready > 0) this.drawCountdown(c, this.mode === 'rtx' ? '¡Renderiza a máxima calidad!' : '¡Modo retro listo!');
+  }
+}
+
+if (typeof module !== 'undefined') module.exports = { BaseGame, RaceGame, DefenseGame, CatcherGame, GuardianGame, DiskOrganizerGame, DataMazeGame, AssemblyWorkshopGame, GpuRenderGame };

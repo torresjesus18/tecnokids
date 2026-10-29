@@ -32,6 +32,8 @@ Proyecto final de **Diseño de Sitios Web** · Ingeniería de Software.
    | 2 | `sql/migracion-ruleta.sql` | Giro gratis de la Ruleta Tecno |
    | 3 | `sql/migracion-rom.sql` | Pieza de almacenamiento (ROM) |
    | 4 | `sql/migracion-nuevos-juegos.sql` | Organizador de Disco y Laberinto de Datos |
+   | 5 | `sql/migracion-taller-ensamblaje.sql` | Taller de Ensamblaje |
+   | 6 | `sql/migracion-renderizado-gpu.sql` | Desafío de Renderizado GPU |
 
 4. Abre **http://localhost:3000**.
 
@@ -51,6 +53,8 @@ Render Free puede suspender el servidor tras un período sin actividad; el prime
    3. `sql/migracion-ruleta.sql`
    4. `sql/migracion-rom.sql`
    5. `sql/migracion-nuevos-juegos.sql`
+   6. `sql/migracion-taller-ensamblaje.sql`
+   7. `sql/migracion-renderizado-gpu.sql`
 6. Despliega y abre la URL pública del servicio. `/healthz` debe responder `ok`.
 
 La aplicación toma el puerto de `PORT`, confía en el proxy HTTPS de Render y guarda las sesiones en PostgreSQL. Como la base empieza vacía, no se importan usuarios ni avances de pruebas.
@@ -67,6 +71,10 @@ Cada juego tiene tres dificultades (Fácil, Medio, Difícil) que cambian el reto
 | 🛡️ Defensa del Sistema | Proteger la CPU de los virus | 2/2/2/1 | 3/3/3/2 |
 | 💾 El Organizador de Disco | Acomodar bloques de archivos y liberar espacio | 1/1/1/1 | 2/2/1/2 |
 | 🧩 Laberinto de Datos | Guiar a Byte, recoger paquetes y evitar virus | 1/1/1/1 | 2/2/2/2 |
+| 🛠️ Taller de Ensamblaje | Arrastrar las piezas y ensamblar un computador | 1/1/1/1 | 1/1/1/1 |
+| 🚀 Desafío de Renderizado GPU | Pilotar un cohete, recoger núcleos y esquivar polvo para evitar el sobrecalentamiento | 1/1/1/1 | 2/2/3/2 |
+
+El Desafío de Renderizado GPU ofrece modo retro (30 FPS) y modo RTX (144+ FPS), desbloqueado con una GPU de nivel 3 o superior. Las pistas duran más en dificultades altas. El polvo representa ventilación obstruida: los choques acumulan calor y la GPU se apaga al llegar al límite. Los FPS y la temperatura son simulaciones educativas del juego, no mediciones del equipo.
 
 ## Piezas del PC
 
@@ -87,7 +95,7 @@ Al iniciar una partida, el **servidor** compara el nivel de cada pieza equipada 
 - **Monedas:** se calculan en el servidor (`RewardManager`) según el resultado de cada juego (en la carrera, por ejemplo, 60, 35 o 15 monedas base según el puesto) y la dificultad. Las partidas demasiado cortas pagan casi nada.
 - **Nivel:** sube con la experiencia; cada nivel pide más puntos que el anterior (nivel × 150).
 - **Insignias:** por logros (primera partida, campeón, defensor, PC ideal, primera compra, etc.).
-- **Ruleta Tecno:** un giro gratis cada 2 horas; los giros extra cuestan 20 monedas. Los premios van de 5 a 80 monedas y el reparto está calculado para que, en promedio, un giro pagado devuelva menos de lo que cuesta.
+- **Ruleta Tecno:** un giro gratis cada 2 horas; los giros extra cuestan 20 monedas. Los premios van de 5 a 80 monedas, los sectores reflejan sus probabilidades reales y estas se muestran en pantalla. Un giro pagado devuelve 20 monedas en promedio; esto no garantiza recuperar el costo en cada giro.
 
 ## Estructura del proyecto
 
@@ -100,6 +108,7 @@ Al iniciar una partida, el **servidor** compara el nivel de cada pieza equipada 
     src/game/PlayerProgress.js      Nivel y experiencia
     sql/                       Esquema y migraciones
     public/js/games.js         Motor de los juegos (Canvas)
+    public/img/ensamblaje/     Imágenes del Taller de Ensamblaje
     public/js/app.js           Pantallas y navegación
     public/js/soundManager.js, speechManager.js, byteAssistant.js, spaceEffects.js
     public/img, public/audio   Portadas y sonido

@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { Pool } = require('pg');
+// En producción exige TLS; localmente permite los parámetros PG* habituales de PostgreSQL.
 const databaseUrl = process.env.DATABASE_URL;
 if (databaseUrl && process.env.NODE_ENV === 'production') {
   const sslMode = new URL(databaseUrl).searchParams.get('sslmode');

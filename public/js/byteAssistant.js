@@ -1,3 +1,4 @@
+// Ayuda contextual de Byte: pistas y controles según la ruta y el juego activo.
 (() => {
   const widget = document.querySelector('#byte-widget');
   const app = document.querySelector('#app');
@@ -14,7 +15,9 @@
     defensa: 'Mueve tu nave y apunta a los enemigos antes de que alcancen la base.',
     'ciber-guardian': 'Elimina los virus pronto y protege el centro de la CPU.',
     'organizador-disco': 'Gira los bloques y deja espacio para completar filas.',
-    'laberinto-datos': 'Usa los cruces para cambiar de ruta, esquivar virus y juntar paquetes.'
+    'laberinto-datos': 'Usa los cruces para cambiar de ruta, esquivar virus y juntar paquetes.',
+    'taller-ensamblaje': 'Busca el espacio resaltado y arrastra allí la pieza correcta. La pasta térmica va sobre el procesador.',
+    'renderizado-gpu': 'Recoge núcleos para subir los FPS y esquiva el polvo; los choques acumulan calor y pueden apagar la GPU.'
   };
   const helpText = {
     carrera: 'En Carrera Cósmica, usa las flechas izquierda y derecha para cambiar de carril. En celular, toca el lado al que quieres moverte.',
@@ -22,7 +25,9 @@
     defensa: 'Usa las flechas para mover la nave y arrastra en la pantalla para apuntar.',
     'ciber-guardian': 'Toca los virus para eliminarlos antes de que lleguen a la CPU.',
     'organizador-disco': 'Mueve los bloques con las flechas, usa arriba para girarlos y espacio para soltarlos.',
-    'laberinto-datos': 'Usa las flechas o WASD para mover a Byte. En celular, toca los controles en pantalla.'
+    'laberinto-datos': 'Usa las flechas o WASD para mover a Byte. En celular, toca los controles en pantalla.',
+    'taller-ensamblaje': 'Arrastra cada pieza al espacio resaltado. En celular, toca la pieza y luego el espacio. La pasta térmica va sobre el procesador, no en una ranura.',
+    'renderizado-gpu': 'Pilota con flechas o WASD, o arrastra el cohete en celular. Recoge núcleos y esquiva el polvo que obstruye la ventilación. Tres choques sobrecalientan y apagan la GPU. Puedes reiniciar desde el botón superior.'
   };
   let speaking = localStorage.getItem('byte-voice') === 'on';
   let lastRoute = location.hash;
@@ -49,7 +54,7 @@
     else if (!slot && widget.parentElement !== document.body) document.body.appendChild(widget);
     widget.classList.toggle('byte-widget-inline', !!slot);
     widget.hidden = inGame;
-    if (inGame) {
+    if (widget.hidden) {
       panel.hidden = true;
       launcher.setAttribute('aria-expanded', 'false');
     }

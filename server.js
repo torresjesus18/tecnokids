@@ -1,4 +1,5 @@
 require('dotenv').config();
+// Punto de entrada: configura Express, sesiones persistentes, archivos públicos y API.
 const express = require('express');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
@@ -10,6 +11,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 if (isProduction && !process.env.SESSION_SECRET) {
   throw new Error('SESSION_SECRET es obligatorio en producción.');
 }
+// Render termina TLS en un proxy; Express necesita confiar en ese proxy para cookies seguras.
 if (isProduction) app.set('trust proxy', 1);
 
 app.use(express.json({ limit: '20kb' }));
@@ -20,6 +22,7 @@ app.use(session({
   resave: false, saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: 'lax', secure: isProduction, maxAge: 7 * 864e5 }
 }));
+// Render usa esta ruta para comprobar que la aplicación también puede consultar PostgreSQL.
 app.get('/healthz', async (req, res) => {
   try {
     await pool.query('SELECT 1');

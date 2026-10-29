@@ -1,3 +1,4 @@
+// Efectos decorativos de fondo, limitados por preferencia de movimiento y temporizadores.
 (() => {
   const layer = document.querySelector('#space-effects');
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -201,13 +202,15 @@
     const graphic = ship.querySelector('svg');
     graphic.style.transformBox = 'fill-box';
     graphic.style.transformOrigin = 'center';
-    const rotationFrames = [
-      { transform: `rotate(${points[0].angle}deg)`, offset: 0 },
-      ...points.map((point, index) => ({ transform: `rotate(${point.angle}deg)`, offset: travelOffset(distances[index]) })),
-      { transform: `rotate(${points[points.length - 1].angle}deg)`, offset: 1 }
-    ];
+    const rotationFrames = points.map((point, index) => ({
+      transform: `rotate(${point.angle}deg)`,
+      offset: travelOffset(distances[index]),
+      easing: 'steps(1, start)'
+    }));
+    rotationFrames.unshift({ transform: `rotate(${points[0].angle}deg)`, offset: 0 });
+    rotationFrames.push({ transform: `rotate(${points[points.length - 1].angle}deg)`, offset: 1 });
     const positionAnimation = ship.animate(positionFrames, { duration: sideShipDuration, easing: 'linear', fill: 'forwards' });
-    const rotationAnimation = graphic.animate(rotationFrames, { duration: sideShipDuration, easing: 'steps(1, end)', fill: 'forwards' });
+    const rotationAnimation = graphic.animate(rotationFrames, { duration: sideShipDuration, easing: 'linear', fill: 'forwards' });
     activeAnimations.add(positionAnimation);
     activeAnimations.add(rotationAnimation);
     positionAnimation.onfinish = () => {

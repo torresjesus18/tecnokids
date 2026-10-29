@@ -1,3 +1,4 @@
+// Catálogo único de hardware y requisitos que comparten tienda, simulador y juegos.
 const parts = {
   cpu: [
     { code: 'cpu1', name: 'Procesador Chispa', spec: '2 núcleos · 2.0 GHz', level: 1, price: 0, icon: '🧠' },
@@ -27,6 +28,7 @@ const parts = {
 
 const starter = { cpu: 'cpu1', ram: 'ram1', gpu: 'gpu1', rom: 'rom1' };
 
+// Cada misión declara requisitos mínimos y recomendados; el simulador convierte estos niveles en efectos.
 const games = {
   carrera: {
     name: 'Carrera Cósmica', icon: '🏎️', minSeconds: 15, maxCoins: 70,
@@ -63,6 +65,20 @@ const games = {
     desc: 'Guía a Byte por un laberinto de circuitos, recoge paquetes de datos y evita a los virus.',
     controls: 'Usa las flechas o WASD para moverte por el laberinto. En móvil, toca las flechas de la pantalla.',
     min: { cpu: 1, ram: 1, gpu: 1, rom: 1 }, rec: { cpu: 2, ram: 2, gpu: 2, rom: 2 }
+  },
+  'taller-ensamblaje': {
+    name: 'Taller de Ensamblaje', icon: '🛠️', minSeconds: 12, maxCoins: 80,
+    timeLimitSec: { facil: 120, medio: 90, dificil: 60 },
+    desc: 'Arrastra las piezas al gabinete. Tienes 2 min en Fácil, 1:30 en Medio y 1 min en Difícil; terminar más rápido y cometer menos errores mejora tus monedas. El SSD SATA es una pieza distractora.',
+    controls: 'Arrastra cada pieza a la zona resaltada. En celular, toca una pieza y luego su espacio.',
+    min: { cpu: 1, ram: 1, gpu: 1, rom: 1 }, rec: { cpu: 1, ram: 1, gpu: 1, rom: 1 }
+  },
+  'renderizado-gpu': {
+    name: 'Desafío de Renderizado GPU', icon: '🚀', badge: '⚡ Carrera de Rendimiento', rating: 4, action: '¡Renderizar!',
+    minSeconds: 28, maxCoins: 80,
+    desc: '¡Pilota tu cohete GPU! Junta núcleos para aumentar los FPS y esquiva el polvo que puede obstruir la ventilación y sobrecalentar la tarjeta.',
+    controls: 'Usa las flechas o WASD para pilotar. En celular, arrastra el cohete para recoger núcleos y esquivar el polvo.',
+    min: { cpu: 1, ram: 1, gpu: 1, rom: 1 }, rec: { cpu: 2, ram: 2, gpu: 3, rom: 2 }
   }
 };
 

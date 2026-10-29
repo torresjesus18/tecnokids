@@ -9,6 +9,7 @@
 </head>
 <body>
   <div class="space-effects" id="space-effects" aria-hidden="true"></div>
+  <!-- La barra cambia por ruta; el contenido principal lo administra app.js como SPA. -->
   <header>
     <nav class="navbar navbar-expand-md tk-nav">
       <div class="container">
@@ -23,6 +24,7 @@
     <small>TecnoKids · Proyecto de Diseño de Sitios Web · 2026</small>
   </footer>
 
+  <!-- Byte y los modales son persistentes; las vistas de #app se reemplazan al navegar. -->
   <aside class="byte-widget" id="byte-widget" aria-label="Ayuda de Byte">
     <section class="byte-panel" id="byte-panel" aria-labelledby="byte-title" hidden>
       <header class="byte-panel-header">
@@ -88,6 +90,7 @@
     </div>
   </div>
 
+  <!-- Estos modales permanecen montados mientras app.js reemplaza las vistas de #app. -->
   <div class="modal fade" id="difficulty" tabindex="-1" aria-labelledby="diff-title" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content tk-modal text-center">
@@ -113,12 +116,16 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
         </div>
         <div class="modal-body roulette-body">
-          <div class="wheel-wrap"><canvas id="wheel" width="320" height="320" aria-label="Ruleta de premios"></canvas></div>
+          <div class="wheel-wrap">
+            <canvas id="wheel" width="320" height="320" aria-label="Ruleta Tecno con premios de 5 a 80 monedas"></canvas>
+            <span class="wheel-pointer" aria-hidden="true"></span>
+            <span class="wheel-hub" aria-hidden="true">🎡</span>
+          </div>
           <p class="fs-5 fw-bold mb-1" id="wheel-msg">¡Prueba tu suerte!</p>
           <p class="mb-0" id="wheel-state"></p>
         </div>
         <div class="modal-footer justify-content-center">
-          <button class="btn btn-tk" id="wheel-go" type="button">¡Girar!</button>
+          <button class="btn btn-tk roulette-spin-button" id="wheel-go" type="button">¡Girar!</button>
         </div>
       </div>
     </div>

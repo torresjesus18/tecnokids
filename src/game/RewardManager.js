@@ -2,6 +2,7 @@
 const DIFF_MULT = { facil: 1, medio: 1.15, dificil: 1.35 };
 const XP_PER_LEVEL = 150;
 
+// Centraliza estrellas, niveles, monedas e insignias para que todos los juegos premien igual.
 class RewardManager {
   stars(score) { return score >= 90 ? 3 : score >= 60 ? 2 : score >= 30 ? 1 : 0; }
   levelFor(points) {
@@ -21,8 +22,8 @@ class RewardManager {
     if (game === 'carrera') {
       c = { 1: 60, 2: 35, 3: 15 }[o.position] || 0;
       if (c && profile.status === 'ok') c += 10;
-    } else if (['clasificador', 'organizador-disco', 'laberinto-datos'].includes(game)) {
-      // El juego reporta el puntaje (0..100) de los componentes atrapados y aquí se acota.
+    } else if (['clasificador', 'organizador-disco', 'laberinto-datos', 'taller-ensamblaje', 'renderizado-gpu'].includes(game)) {
+      // Estos juegos reportan un puntaje (0..100) que se limita antes de calcular monedas.
       c = Math.round((Math.max(0, Math.min(100, o.score || 0)) / 100) * g.maxCoins);
       if (c > 0 && profile.status === 'ok') c += 10;
     } else {

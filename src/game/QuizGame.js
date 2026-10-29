@@ -1,3 +1,4 @@
+// Mantiene las respuestas correctas en el servidor y entrega al navegador solo preguntas públicas.
 class QuizGame {
   constructor(questions) {
     this.questions = questions;

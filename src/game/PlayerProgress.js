@@ -1,3 +1,4 @@
+// Calcula los tramos acumulativos de XP y expone un formato listo para la interfaz.
 class PlayerProgress {
   constructor({ points = 0, level = 1 }) { this.points = points; this.level = level; }
   get xpForNextLevel() { return this.level * 150; }

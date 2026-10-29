@@ -4,22 +4,32 @@ const ComputerSimulator = require('./game/ComputerSimulator');
 const RewardManager = require('./game/RewardManager');
 const PlayerProgress = require('./game/PlayerProgress');
 
+// Coordina reglas de juego y persistencia; todas las recompensas se verifican en el servidor.
 const KINDS = Object.keys(parts);
 const DIFFICULTIES = ['facil', 'medio', 'dificil'];
 const fail = msg => Object.assign(new Error(msg), { user: true });
 
 // Ruleta de Recompensas: un giro gratis cada 2 horas; los demás cuestan monedas.
-// Los premios y sus probabilidades viven solo en el servidor.
+// Estos pesos deciden el sorteo; el Canvas mantiene un sector por premio, sin duplicarlos.
 const FREE_SPIN_MS = 2 * 60 * 60 * 1000;
 const SPIN_COST = 20;
+// Mantener este orden: el índice de cada premio señala su sector en el Canvas.
 const SPIN_PRIZES = [
-  { name: '5 monedas', icon: '🥉', coins: 5, weight: 30 },
-  { name: '10 monedas', icon: '🪙', coins: 10, weight: 30 },
-  { name: '20 monedas', icon: '💰', coins: 20, weight: 20 },
-  { name: '30 monedas', icon: '💵', coins: 30, weight: 12 },
-  { name: '50 monedas', icon: '💎', coins: 50, weight: 6 },
+  { name: '5 monedas', icon: '🥉', coins: 5, weight: 20 },
+  { name: '10 monedas', icon: '🪙', coins: 10, weight: 21 },
+  { name: '20 monedas', icon: '💰', coins: 20, weight: 32 },
+  { name: '30 monedas', icon: '💵', coins: 30, weight: 18 },
+  { name: '50 monedas', icon: '💎', coins: 50, weight: 7 },
   { name: '80 monedas', icon: '🏆', coins: 80, weight: 2 }
 ];
+const SPIN_WEIGHT_TOTAL = SPIN_PRIZES.reduce((sum, prize) => sum + prize.weight, 0);
+const PAID_SPIN_ODDS = Object.freeze({
+  recoverOrWinPercent: Math.round(
+    SPIN_PRIZES.filter(prize => prize.coins >= SPIN_COST).reduce((sum, prize) => sum + prize.weight, 0)
+      / SPIN_WEIGHT_TOTAL * 100
+  ),
+  averagePrize: SPIN_PRIZES.reduce((sum, prize) => sum + prize.coins * prize.weight, 0) / SPIN_WEIGHT_TOTAL
+});
 class ProgressService {
   constructor() { this.rewards = new RewardManager(); this.sim = new ComputerSimulator(parts, games); }
 
@@ -48,7 +58,12 @@ class ProgressService {
     const previews = {}, pub = {};
     for (const [id, g] of Object.entries(games)) {
       previews[id] = this.sim.profile(id, equipped);
-      pub[id] = { name: g.name, icon: g.icon, desc: g.desc, controls: g.controls };
+      pub[id] = {
+        name: g.name, icon: g.icon, desc: g.desc, controls: g.controls,
+        ...(g.badge ? { badge: g.badge } : {}),
+        ...(g.rating ? { rating: g.rating } : {}),
+        ...(g.action ? { action: g.action } : {})
+      };
     }
     return { coins, owned, equipped, catalog: parts, games: pub, previews };
   }
@@ -58,6 +73,7 @@ class ProgressService {
     if (!part) throw fail('Ese componente no existe');
     const c = await pool.connect();
     try {
+      // Bloquea el saldo para que dos compras simultáneas no gasten las mismas monedas.
       await c.query('BEGIN');
       await this._ensurePc(c, userId);
       const pr = await c.query('SELECT coins FROM player_progress WHERE user_id=$1 FOR UPDATE', [userId]);
@@ -84,12 +100,23 @@ class ProgressService {
   }
 
   // El niño elige Fácil / Medio / Difícil antes de jugar; queda guardado en el perfil de la partida.
-  async startGame(userId, gameId, difficulty = 'medio') {
+  async startGame(userId, gameId, difficulty = 'medio', renderMode) {
     if (!games[gameId]) throw fail('Juego no válido');
     const level = DIFFICULTIES.includes(difficulty) ? difficulty : 'medio';
     await this._ensurePc(pool, userId);
     const eq = (await pool.query('SELECT cpu, ram, gpu, rom FROM user_pc WHERE user_id=$1', [userId])).rows[0];
-    const profile = { ...this.sim.profile(gameId, eq), difficulty: level };
+    const profile = {
+      ...this.sim.profile(gameId, eq),
+      difficulty: level,
+      ...(games[gameId].timeLimitSec ? { timeLimitSec: games[gameId].timeLimitSec[level] } : {})
+    };
+    if (gameId === 'renderizado-gpu') {
+      const gpuLevel = profile.componentLevels.gpu;
+      const mode = renderMode || (gpuLevel >= 3 ? 'rtx' : 'retro');
+      if (!['retro', 'rtx'].includes(mode)) throw fail('El modo gráfico no es válido');
+      if (mode === 'rtx' && gpuLevel < 3) throw fail('Necesitas una GPU de nivel 3 o superior para activar RTX.');
+      profile.renderMode = mode;
+    }
     if (profile.status === 'fail') {
       throw fail(`No puedes iniciar ${games[gameId].name} todavía. ${profile.tips.join(' ')}`);
     }
@@ -102,24 +129,48 @@ class ProgressService {
     if (!Number.isInteger(sid)) throw fail('Partida no válida');
     const c = await pool.connect();
     try {
+      // Bloquea la sesión para impedir que dos solicitudes la finalicen y paguen dos veces.
       await c.query('BEGIN');
       const s = await c.query(
         `SELECT game, profile, EXTRACT(EPOCH FROM (now() - started_at)) AS secs FROM game_sessions
          WHERE id=$1 AND user_id=$2 AND finished_at IS NULL FOR UPDATE`, [sid, userId]);
       if (!s.rows[0]) throw fail('Esa partida ya terminó o no existe');
       const { game, profile } = s.rows[0], secs = Number(s.rows[0].secs), g = games[game];
-      const o = { crashed: raw.crashed === true, position: Number(raw.position) | 0, waves: Number(raw.waves) | 0, won: raw.won === true,
-        score: Math.max(0, Math.min(100, Math.round(Number(raw.score) || 0))) };
+      // Normaliza y limita los datos del cliente antes de calcular recompensas en el servidor.
+      const o = {
+        crashed: raw.crashed === true,
+        position: Number(raw.position) | 0,
+        waves: Number(raw.waves) | 0,
+        won: raw.won === true && raw.timedOut !== true,
+        score: Math.max(0, Math.min(100, Math.round(Number(raw.score) || 0))),
+        ...(game === 'taller-ensamblaje' ? {
+          installed: Math.max(0, Math.min(6, Number(raw.installed) | 0)),
+          timedOut: raw.timedOut === true,
+          elapsedSeconds: Math.max(0, Math.floor(Number(raw.elapsedSeconds) || 0))
+        } : {}),
+        ...(game === 'renderizado-gpu' ? {
+          cores: Math.max(0, Math.min(100, Number(raw.cores) | 0)),
+          distance: Math.max(0, Math.min(100000, Math.floor(Number(raw.distance) || 0))),
+          hits: Math.max(0, Math.min(3, Number(raw.hits) | 0)),
+          renderMode: profile.renderMode
+        } : {})
+      };
       // Si el perfil decía que el juego se cerraba y el navegador afirma que terminó, el servidor manda.
       if (!o.crashed && profile.crashAfterSec != null && secs > profile.crashAfterSec + 3) o.crashed = true;
       const coins = this.rewards.coinsFor(game, o, profile, secs, g);
       const score = Math.min(100, Math.round((coins / g.maxCoins) * 100));
       const completed = !o.crashed && (game === 'carrera' ? o.position >= 1 && o.position <= 2
-        : ['clasificador', 'organizador-disco', 'laberinto-datos'].includes(game) ? o.score >= 60
+        : game === 'taller-ensamblaje' ? o.won && o.score >= 60
+          : ['clasificador', 'organizador-disco', 'laberinto-datos', 'renderizado-gpu'].includes(game) ? o.score >= 60
           : o.won);
       const firstEver = !(await c.query('SELECT 1 FROM game_sessions WHERE user_id=$1 AND finished_at IS NOT NULL LIMIT 1', [userId])).rowCount;
       const mission = (await c.query('SELECT id FROM missions WHERE slug=$1', [game])).rows[0];
-      if (!mission) throw fail(`La misión "${game}" no está registrada. Ejecuta sql/migracion-nuevos-juegos.sql y reinicia el servidor.`);
+      if (!mission) {
+        const migration = game === 'renderizado-gpu' ? 'sql/migracion-renderizado-gpu.sql'
+          : game === 'taller-ensamblaje' ? 'sql/migracion-taller-ensamblaje.sql'
+            : 'la migración correspondiente en sql/';
+        throw fail(`La misión "${game}" no está registrada. Ejecuta ${migration} y reinicia el servidor.`);
+      }
       await c.query('INSERT INTO mission_attempts (user_id, mission_id, score, completed, result_data) VALUES ($1,$2,$3,$4,$5)',
         [userId, mission.id, score, completed, JSON.stringify({ ...o, status: profile.status })]);
       const cur = (await c.query('SELECT total_points, coins FROM player_progress WHERE user_id=$1 FOR UPDATE', [userId])).rows[0];
@@ -141,8 +192,10 @@ class ProgressService {
        FROM player_progress WHERE user_id=$1`, [userId, FREE_SPIN_MS])).rows[0];
     if (!p) throw fail('No encontramos tu progreso');
     const restante = Number(p.free_spin_in);
+    // El orden de SPIN_PRIZES es también el mapa estable entre premio e índice del Canvas.
     return {
-      prizes: SPIN_PRIZES.map(({ name, icon }) => ({ name, icon })),
+      prizes: SPIN_PRIZES.map(({ name, icon, coins, weight }) => ({ name, icon, coins, weight })),
+      paidOdds: PAID_SPIN_ODDS,
       cost: SPIN_COST, coins: p.coins, free: restante === 0, nextFreeIn: restante
     };
   }
@@ -158,8 +211,8 @@ class ProgressService {
       if (!p) throw fail('No encontramos tu progreso');
       const restante = Number(p.free_spin_in), free = restante === 0;
       if (!free && p.coins < SPIN_COST) throw fail(`Te faltan monedas: cada giro cuesta ${SPIN_COST} 🪙 y el giro gratis todavía no vuelve.`);
-      const total = SPIN_PRIZES.reduce((s, x) => s + x.weight, 0);
-      let r = Math.random() * total, index = 0;
+      // La fila bloqueada serializa giros simultáneos; el sorteo ponderado y el cobro ocurren en la misma transacción.
+      let r = Math.random() * SPIN_WEIGHT_TOTAL, index = 0;
       while (index < SPIN_PRIZES.length - 1 && r >= SPIN_PRIZES[index].weight) { r -= SPIN_PRIZES[index].weight; index++; }
       const prize = SPIN_PRIZES[index];
       const coins = p.coins - (free ? 0 : SPIN_COST) + prize.coins;
@@ -205,4 +258,5 @@ class ProgressService {
     };
   }
 }
+ProgressService.paidSpinOdds = PAID_SPIN_ODDS;
 module.exports = ProgressService;

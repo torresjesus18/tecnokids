@@ -1,3 +1,4 @@
+// Aplicación de una sola página: rutas, vistas, estado de sesión e integración de juegos.
 const app = document.querySelector('#app');
 const sm = window.SoundManager;
 let me = null, currentGame = null, currentKind = 'cpu';
@@ -9,6 +10,7 @@ const byteGreeting = `<div class="byte-welcome">
   </div>
 </div>`;
 async function api(url, method = 'GET', body) {
+  // Todas las peticiones conservan la cookie de sesión y convierten respuestas HTTP en errores visibles.
   const r = await fetch('/api' + url, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { const e = new Error(d.error || 'Algo salió mal'); e.status = r.status; throw e; }
@@ -36,6 +38,8 @@ const show = html => { SpeechManager.stopSpeaking(); app.innerHTML = html; app.f
 const err = e => `<div class="alert alert-danger mt-3" role="alert">${esc(e.message)}</div>`;
 const GAME_CONTROLS = {
   carrera: [['⬅️', '➡️', 'Cambiar de carril'], ['👆', 'Toca un lado de la pantalla']],
+  'taller-ensamblaje': [['🖱️', 'Arrastra una pieza al espacio resaltado'], ['👆', 'Toca pieza y luego el espacio']],
+  'renderizado-gpu': [['⬅️', '⬆️', '➡️', '⬇️', 'Pilotar con flechas o WASD'], ['👆', 'Arrastra el cohete']],
   clasificador: [['⬅️', '➡️', 'Mover la cesta'], ['👆', 'Desliza para mover']],
   defensa: [['⬅️', '➡️', 'Mover la nave'], ['👆', 'Arrastra para apuntar']],
   'ciber-guardian': [['👆', 'Toca los virus para eliminarlos']],
@@ -56,6 +60,15 @@ const KINDS = {
 };
 const wait = ms => { const m = Math.ceil(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };
 const DIFF_LABEL = { facil: 'Fácil', medio: 'Medio', dificil: 'Difícil' };
+const teamSection = `<section class="team-section mt-4" aria-labelledby="team-title">
+  <div class="team-heading"><span class="team-tag">👥 CIPA</span><h2 id="team-title">MSI Team</h2><p>Aprendemos y creamos en equipo.</p></div>
+  <div class="team-members">
+    <div class="team-member"><span aria-hidden="true">👩‍💻</span><strong>Karoll Rodríguez</strong></div>
+    <div class="team-member"><span aria-hidden="true">👨‍💻</span><strong>Camilo Correa</strong></div>
+    <div class="team-member"><span aria-hidden="true">👨‍🚀</span><strong>Jesús Torres</strong></div>
+    <div class="team-member team-member-pending"><span aria-hidden="true">✨</span><strong>Integrante por confirmar</strong></div>
+  </div>
+</section>`;
 
 // Ajustes de sonido (⚙️): interruptor general y volúmenes de música y efectos.
 function initSettings() {
@@ -108,31 +121,64 @@ function initRoulette() {
   const msg = document.querySelector('#wheel-msg'), state = document.querySelector('#wheel-state'), go = document.querySelector('#wheel-go');
   const wheelWrap = modalEl.querySelector('.wheel-wrap');
   const COLS = ['#ffcf33', '#35e0b2', '#7c6bff', '#ff6b81', '#5ad1ff', '#ffa94d'];
-  let prizes = [], rot = 0, spinning = false, raf = null;
+  const WHEEL_SEGMENTS = 6;
+  let prizes = [], rot = 0, spinning = false, raf = null, spinId = 0;
 
   const draw = () => {
-    const W = cv.width, H = cv.height, R = Math.min(W, H) / 2 - 30, n = prizes.length;
+    const W = cv.width, H = cv.height, cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2 - 18;
     c.clearRect(0, 0, W, H);
-    if (!n) return;
-    const step = Math.PI * 2 / n;
-    for (let i = 0; i < n; i++) {
+    if (prizes.length !== WHEEL_SEGMENTS) return;
+    // Los sectores son iguales; cada índice conserva el mismo premio que entrega el servidor.
+    const step = Math.PI * 2 / WHEEL_SEGMENTS;
+    for (let i = 0; i < WHEEL_SEGMENTS; i++) {
+      const prize = prizes[i];
       const a0 = rot + i * step;
-      c.beginPath(); c.moveTo(W / 2, H / 2); c.arc(W / 2, H / 2, R, a0, a0 + step); c.closePath();
-      c.fillStyle = COLS[i % COLS.length]; c.fill();
-      c.strokeStyle = '#fff'; c.lineWidth = 3; c.stroke();
-      c.save(); c.translate(W / 2, H / 2); c.rotate(a0 + step / 2);
-      c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillStyle = '#16124a'; c.font = 'bold 15px sans-serif';
-      c.fillText(`${prizes[i].icon} ${prizes[i].name}`, R - 12, 0);
+      c.save();
+      c.beginPath(); c.moveTo(cx, cy); c.arc(cx, cy, R, a0, a0 + step); c.closePath();
+      c.clip();
+      // El degradado radial y el brillo conservan el relieve sin alterar los límites del sector.
+      const shade = c.createRadialGradient(cx, cy, 14, cx, cy, R);
+      shade.addColorStop(0, COLS[i % COLS.length]);
+      shade.addColorStop(0.2, COLS[i % COLS.length]);
+      shade.addColorStop(1, '#241d68');
+      c.fillStyle = shade; c.fillRect(0, 0, W, H);
+      const sheen = c.createLinearGradient(0, cy - R, W, cy + R);
+      sheen.addColorStop(0, 'rgba(255,255,255,.2)');
+      sheen.addColorStop(0.5, 'rgba(255,255,255,0)');
+      sheen.addColorStop(1, 'rgba(10,8,50,.12)');
+      c.fillStyle = sheen; c.fillRect(0, 0, W, H);
+      c.restore();
+      c.beginPath(); c.moveTo(cx, cy); c.arc(cx, cy, R, a0, a0 + step); c.closePath();
+      c.strokeStyle = 'rgba(255,255,255,.82)'; c.lineWidth = 1.25;
+      c.shadowColor = 'rgba(22,18,74,.35)'; c.shadowBlur = 4; c.stroke();
+      c.shadowBlur = 0;
+      // Las etiquetas se ubican en el radio medio y se voltean si quedarían al revés.
+      const mid = a0 + step / 2, labelRadius = R * 0.59;
+      c.save(); c.translate(cx + Math.cos(mid) * labelRadius, cy + Math.sin(mid) * labelRadius);
+      c.rotate(mid + Math.PI / 2);
+      const textAngle = ((mid + Math.PI / 2) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+      if (textAngle > Math.PI / 2 && textAngle < Math.PI * 1.5) c.rotate(Math.PI);
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = '27px sans-serif';
+      c.fillStyle = '#fff';
+      c.strokeStyle = '#241d68'; c.lineWidth = 3.5;
+      c.shadowColor = 'rgba(20,15,62,.75)'; c.shadowBlur = 3;
+      c.strokeText(prize.icon, 0, -16);
+      c.fillText(prize.icon, 0, -16);
+      c.font = '900 22px Trebuchet MS, sans-serif';
+      c.strokeText(String(prize.coins), 0, 14);
+      c.fillText(String(prize.coins), 0, 14);
       c.restore();
     }
-    c.beginPath(); c.arc(W / 2, H / 2, 26, 0, 6.29); c.fillStyle = '#fff'; c.fill();
-    c.textAlign = 'center'; c.font = '26px sans-serif'; c.fillText('🎡', W / 2, H / 2 + 1);
-    c.beginPath(); c.moveTo(W / 2, H / 2 - R + 4); c.lineTo(W / 2 - 15, H / 2 - R - 20); c.lineTo(W / 2 + 15, H / 2 - R - 20);
-    c.closePath(); c.fillStyle = '#16124a'; c.fill();
   };
 
   const load = async () => {
     const d = await api('/roulette');
+    // El dibujo y el índice del resultado dependen del mismo orden de seis premios.
+    if (!d || !Array.isArray(d.prizes) || d.prizes.length !== WHEEL_SEGMENTS
+      || d.prizes.some(prize => !prize || !Number.isFinite(prize.coins) || typeof prize.icon !== 'string')) {
+      throw new Error('No se pudieron cargar los seis premios de la ruleta.');
+    }
     prizes = d.prizes; rot = 0; draw();
     msg.textContent = '¡Prueba tu suerte!';
     state.textContent = d.free ? '🎁 Tienes un giro gratis.' : `Giro gratis en ${wait(d.nextFreeIn)}`;
@@ -142,21 +188,38 @@ function initRoulette() {
 
   const spin = async () => {
     if (spinning) return;
+    const currentSpin = ++spinId;
+    // Desactiva el botón durante la petición para evitar dobles giros concurrentes.
     spinning = true; go.disabled = true; msg.textContent = '¡Girando!'; wheelWrap.classList.add('spinning');
     sm.playSound('wheel');
     let r;
-    try { r = await api('/roulette/spin', 'POST'); }
+    try {
+      r = await api('/roulette/spin', 'POST');
+      const selectedPrize = r && Number.isInteger(r.index) ? prizes[r.index] : null;
+      if (!selectedPrize || !r.prize || selectedPrize.coins !== r.prize.coins
+        || typeof r.prize.name !== 'string' || typeof r.prize.icon !== 'string'
+        || !Number.isFinite(r.coins) || !Number.isFinite(r.nextCost)
+        || !Number.isFinite(r.nextFreeIn) || !Array.isArray(r.newAchievements)) {
+        throw new Error('El resultado recibido no coincide con los premios de la ruleta.');
+      }
+    }
     catch (x) {
+      if (currentSpin !== spinId) return;
       spinning = false; wheelWrap.classList.remove('spinning'); msg.textContent = x.message;
-      try { await load(); } catch (e) { /* sin conexión: se queda el mensaje */ }
+      try { await load(); }
+      catch (refreshError) { state.textContent = `No pudimos actualizar la ruleta: ${refreshError.message}`; }
+      msg.textContent = x.message;
       return;
     }
-    const step = Math.PI * 2 / prizes.length;
-    const base = -Math.PI / 2 - (r.index + 0.5) * step;                  // deja el premio bajo la flecha
+    if (currentSpin !== spinId) return;
+    // Se anima hacia el centro del sector cuyo índice eligió el servidor.
+    const base = -Math.PI / 2 - (r.index + 0.5) * Math.PI * 2 / WHEEL_SEGMENTS;
     const from = rot;
     const delta = Math.PI * 2 * 4 + (((base - from) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
     const t0 = performance.now(), dur = 2800;
     const anim = now => {
+      if (currentSpin !== spinId) return;
+      // Una curva de salida desacelera el giro antes de detenerse en el premio recibido.
       const k = Math.min(1, (now - t0) / dur);
       rot = from + delta * (1 - Math.pow(1 - k, 3));
       draw();
@@ -176,7 +239,11 @@ function initRoulette() {
   go.onclick = spin;
   modalEl.addEventListener('shown.bs.modal', () => { load().catch(x => { msg.textContent = x.message; }); });
   modalEl.addEventListener('hidden.bs.modal', () => {
+    // Invalida respuestas tardías para no dejar un giro colgado al cerrar el modal.
     if (raf) cancelAnimationFrame(raf);
+    raf = null;
+    spinId++;
+    spinning = false;
     wheelWrap.classList.remove('spinning');
   });
 }
@@ -195,6 +262,7 @@ function renderNav(current) {
   if (lo) lo.onclick = async e => { e.preventDefault(); await api('/auth/logout', 'POST'); me = null; location.hash = '#/'; route(); };
 }
 
+// Vistas SPA: cada función dibuja el contenido de una ruta dentro de #app.
 function viewWelcome() {
   show(`<section class="hero row align-items-center g-4">
     <div class="col-lg-7"><h1>Arma tu PC y pruébalo jugando.</h1>
@@ -205,7 +273,8 @@ function viewWelcome() {
     <section class="row g-3 mt-2">
       ${[['🏎️', 'Prueba tu PC jugando', 'Cada juego usa tu procesador, tu memoria y tu tarjeta gráfica.'], ['🪙', 'Gana monedas', 'Mientras mejor te vaya, más monedas ganas.'], ['🛠️', 'Mejora tus piezas', 'Compra componentes y descubre qué cambia en el juego.']]
         .map(([i, t, d]) => `<div class="col-md-4"><div class="mission"><div class="emoji">${i}</div><h3 class="h4">${t}</h3><p class="mb-0">${d}</p></div></div>`).join('')}
-    </section>`);
+    </section>
+    ${teamSection}`);
 }
 
 function viewAuth(start) {
@@ -309,7 +378,9 @@ function viewAuth(start) {
 const partLine = (pc, k) => { const p = pc.catalog[k].find(x => x.code === pc.equipped[k]); return `<li>${p.icon} ${esc(p.name)} <small>· ${esc(p.spec)}</small></li>`; };
 
 async function viewWorld() {
+  const routeHash = location.hash;
   const [d, pc, rl] = await Promise.all([api('/progress'), api('/pc'), api('/roulette')]);
+  if (location.hash !== routeHash) return;
   const canBuyUpgrade = Object.entries(pc.catalog).some(([kind, parts]) => {
     const equipped = parts.find(part => part.code === pc.equipped[kind]);
     return parts.some(part => part.level > equipped.level && !pc.owned.includes(part.code) && part.price <= pc.coins);
@@ -339,23 +410,36 @@ async function viewWorld() {
         <button class="btn btn-tk world-action-button btn-action" type="button" id="btn-ruleta">${rl.free ? 'Girar gratis' : `Girar ${rl.cost} 🪙`}</button>
       </div></div>
     </div>
-    <div class="row g-3">${Object.entries(pc.games).map(([id, g]) => `<div class="col-md-6"><a class="mission game-card" href="#/juego/${id}" aria-label="Jugar ${esc(g.name)}">
-      <img src="/img/${id}.webp" class="mission-img" alt="${esc(g.name)}" onerror="this.src='https://coresg-normal.trae.ai/api/ide/v1/text_to_image?prompt=${encodeURIComponent('futuristic game landscape 3d cartoon style')}&image_size=landscape_16_9'">
+    <div class="row g-3">${Object.entries(pc.games).map(([id, g]) => {
+      const cover = id === 'taller-ensamblaje' ? '/img/ensamblaje/gabinete-abierto.webp'
+        : id === 'renderizado-gpu' ? '/img/renderizado.webp' : `/img/${id}.webp`;
+      const coverFallback = id === 'taller-ensamblaje'
+        ? 'this.hidden=true'
+        : `this.src='https://coresg-normal.trae.ai/api/ide/v1/text_to_image?prompt=${encodeURIComponent('futuristic game landscape 3d cartoon style')}&image_size=landscape_16_9'`;
+      const coverMarkup = `<img src="${cover}" class="mission-img" alt="${id === 'taller-ensamblaje' ? 'Gabinete abierto para ensamblar un computador' : esc(g.name)}" onerror="${coverFallback}">`;
+      const rating = g.rating
+        ? `<span class="rating-stars" aria-label="Calificación ${g.rating} de 5">${'★'.repeat(g.rating)}${'☆'.repeat(5 - g.rating)} <small>${g.rating}/5</small></span>`
+        : stars((d.missions.find(m => m.slug === id) || { stars: 0 }).stars);
+      return `<div class="col-md-6"><a class="mission game-card" href="#/juego/${id}" aria-label="Jugar ${esc(g.name)}">
+      ${coverMarkup}
       <div class="mission-body">
-        <h3 class="h4">${g.icon} ${esc(g.name)}</h3><p class="flex-grow-1">${esc(g.desc)}</p>
+        <h3 class="h4">${g.icon} ${esc(g.name)}</h3>${g.badge ? `<span class="game-badge">${esc(g.badge)}</span>` : ''}<p class="flex-grow-1">${esc(g.desc)}</p>
         <div class="fw-bold">${pc.previews[id].status === 'fail' ? '⛔ Requiere mejoras' : pc.previews[id].status === 'ok' ? '✅ Va fluido' : '⚠️ Va con tirones'}</div>
         <div class="d-flex justify-content-between align-items-center mt-2">
-          ${stars((d.missions.find(m => m.slug === id) || { stars: 0 }).stars)}
-          <span class="btn btn-tk alt">¡Jugar!</span>
+          ${rating}
+          <span class="btn btn-tk alt">${esc(g.action || '¡Jugar!')}</span>
         </div>
       </div>
-    </a></div>`).join('')}
-    </div>`);
+    </a></div>`;
+    }).join('')}
+    </div>
+    ${teamSection}`);
   document.querySelector('#btn-ruleta').onclick = openRoulette;
 }
 
 async function viewPc(note, upgrade) {
   const d = await api('/pc');
+  if (location.hash !== '#/mi-pc') return;
   const cat = KINDS[currentKind];
   
   show(`<div class="garage">
@@ -446,9 +530,10 @@ async function viewPc(note, upgrade) {
       if (!selectedPart || !currentPart) throw new Error('No se pudo identificar el nivel del componente.');
       const direction = selectedPart.level > currentPart.level ? 'up' : 'down';
       const r = await api('/shop/buy', 'POST', { code: b.dataset.buy }); 
+      if (location.hash !== '#/mi-pc') return;
       sm.playSound('correct');
       viewPc('¡Pieza comprada! ' + r.newAchievements.map(a => `${a.icon} ${a.name}`).join(', '), { code: b.dataset.buy, direction });
-    } catch (x) { document.querySelector('#fb').innerHTML = err(x); }
+    } catch (x) { const feedback = document.querySelector('#fb'); if (feedback && location.hash === '#/mi-pc') feedback.innerHTML = err(x); }
   });
 
   // Equipar
@@ -460,12 +545,14 @@ async function viewPc(note, upgrade) {
       if (!currentPart || !selectedPart) throw new Error('No se pudo identificar el nivel del componente.');
       const direction = selectedPart.level > currentPart.level ? 'up' : 'down';
       await api('/pc/equip', 'POST', { ...d.equipped, [k]: code }); 
+      if (location.hash !== '#/mi-pc') return;
       sm.playSound('correct');
       viewPc('¡PC actualizado!', { code, direction });
-    } catch (x) { document.querySelector('#fb').innerHTML = err(x); }
+    } catch (x) { const feedback = document.querySelector('#fb'); if (feedback && location.hash === '#/mi-pc') feedback.innerHTML = err(x); }
   });
 }
 
+// Compara piezas antes de equiparlas y explica cambios de rendimiento al jugador.
 function componentSpecDelta(current, candidate) {
   if (!current || !candidate) return '';
   const metrics = spec => Array.from(spec.matchAll(/(\d+(?:[.,]\d+)?)\s*(núcleos|GHz|GB)/gi), match => ({
@@ -507,9 +594,15 @@ function askDifficulty(gameTitle, onPick) {
 }
 
 // Pide la dificultad y arranca la partida directamente, sin pasar por la pantalla de instrucciones.
-function startGame(id, g, fb) {
+// Inicia una partida autorizada por el backend y entrega el perfil al motor Canvas.
+function startGame(id, g, fb, options = {}) {
+  const routeHash = location.hash;
   askDifficulty(`${g.icon} <strong>${esc(g.name)}</strong>`, async diff => {
-    try { play(id, g, await api('/games/start', 'POST', { game: id, difficulty: diff })); }
+    if (location.hash !== routeHash) return;
+    const renderMode = id === 'renderizado-gpu'
+      ? options.renderMode || document.querySelector('#render-mode')?.value
+      : undefined;
+    try { play(id, g, await api('/games/start', 'POST', { game: id, difficulty: diff, renderMode })); }
     catch (x) {
       const msg = err(x);
       if (fb) fb.innerHTML = msg; else show(`<div class="panel"><h2>Ups</h2>${msg}</div>`);
@@ -518,22 +611,45 @@ function startGame(id, g, fb) {
 }
 
 async function viewGame(id) {
-  const d = await api('/pc'), g = d.games[id];
+  const routeHash = `#/juego/${id}`;
+  const d = await api('/pc');
+  if (location.hash !== routeHash) return;
+  const g = d.games[id];
   if (!g) return viewWelcome();
   const pv = d.previews[id];
   const components = Object.keys(KINDS).map(kind => {
     const part = d.catalog[kind].find(item => item.code === d.equipped[kind]);
     return `<span class="hardware-chip" title="${esc(part.spec)}">${KINDS[kind][0]} ${esc(part.name)}</span>`;
   }).join('');
-  show(`<div class="panel game-menu">
+  const isAssembly = id === 'taller-ensamblaje';
+  const isGpuChallenge = id === 'renderizado-gpu';
+  const gpuLevel = d.catalog.gpu.find(item => item.code === d.equipped.gpu)?.level || 1;
+  show(`<div class="panel game-menu ${isAssembly ? 'game-menu-assembly' : ''}">
     <a class="btn btn-tk alt game-back" href="#/mundo">◀ Atrás</a>
     <div class="game-lobby-grid">
       <section class="game-lobby-action" aria-labelledby="game-lobby-title">
-        <img src="/img/${encodeURIComponent(id)}.webp" class="game-lobby-cover" alt="Portada de ${esc(g.name)}" onerror="this.hidden=true">
+        ${isAssembly
+          ? `<div class="assembly-lobby-art" aria-hidden="true"><span class="assembly-art-glow"></span><span class="assembly-art-board">🧩</span><span class="assembly-art-computer">🖥️</span><span class="assembly-art-tool">🔧</span><span class="assembly-art-chip">⚙️</span></div>`
+          : isGpuChallenge
+            ? `<img src="/img/renderizado.webp" class="game-lobby-cover" alt="Portada de ${esc(g.name)}">`
+            : `<img src="/img/${encodeURIComponent(id)}.webp" class="game-lobby-cover" alt="Portada de ${esc(g.name)}" onerror="this.hidden=true">`}
+        ${isAssembly ? '<span class="game-lobby-kicker">MISIÓN PRÁCTICA</span>' : ''}
+        ${isGpuChallenge ? `<span class="game-lobby-kicker">${esc(g.badge || '⚡ Carrera de Rendimiento')}</span>` : ''}
         <h1 class="h2" id="game-lobby-title">${g.icon} ${esc(g.name)}</h1>
         <p>${esc(g.desc)}</p>
-        <button class="btn btn-tk alt btn-play-big" id="go" type="button" ${pv.status === 'fail' ? 'disabled' : ''}>${pv.status === 'fail' ? '🔒 Necesitas mejorar tu PC' : '🎮 ¡JUGAR AHORA!'}</button>
-        <button class="btn btn-tk speak-btn" type="button" data-speak-sel="#guia">🔊 Escuchar</button>
+        ${isAssembly ? '<div class="assembly-time-note"><span>⏱️ Tiempo por dificultad</span><strong>Fácil 2:00 <i>·</i> Medio 1:30 <i>·</i> Difícil 1:00</strong></div>' : ''}
+        ${isGpuChallenge ? `<div class="render-mode-picker">
+          <label for="render-mode">🎨 Calidad gráfica</label>
+          <select class="form-select" id="render-mode">
+            <option value="retro" ${gpuLevel < 3 ? 'selected' : ''}>🟩 Baja GPU · Integrados · 30 FPS · Retro 8 bits</option>
+            <option value="rtx" ${gpuLevel >= 3 ? 'selected' : ''} ${gpuLevel < 3 ? 'disabled' : ''}>🌈 Alta GPU · RTX · 144+ FPS · Neón</option>
+          </select>
+          <small>${gpuLevel < 3 ? 'Mejora tu GPU a nivel 3 para desbloquear RTX.' : `Tu GPU de nivel ${gpuLevel} admite ambos modos.`}</small>
+        </div>` : ''}
+        <div class="game-lobby-actions">
+          <button class="btn btn-tk alt btn-play-big" id="go" type="button" ${pv.status === 'fail' ? 'disabled' : ''}>${pv.status === 'fail' ? '🔒 Necesitas mejorar tu PC' : '🎮 ¡JUGAR AHORA!'}</button>
+          <button class="btn btn-tk speak-btn" type="button" data-speak-sel="#guia">🔊 Escuchar</button>
+        </div>
       </section>
       <section class="game-lobby-info" id="guia" aria-label="Estado de la PC, controles y componentes">
         <div class="game-performance ${pv.status}" role="status">${chip(pv)}</div>
@@ -556,23 +672,37 @@ async function viewGame(id) {
 }
 
 // Cada juego tiene su propio motor de canvas.
+// Registro entre identificadores de misión y clases del motor de juego.
 const ENGINES = {
   carrera: RaceGame, clasificador: CatcherGame, defensa: DefenseGame, 'ciber-guardian': GuardianGame,
-  'organizador-disco': DiskOrganizerGame, 'laberinto-datos': DataMazeGame
+  'organizador-disco': DiskOrganizerGame, 'laberinto-datos': DataMazeGame,
+  'taller-ensamblaje': AssemblyWorkshopGame, 'renderizado-gpu': GpuRenderGame
 };
 
 function play(id, g, s) {
   sm.playBGM('game');
-  show(`<div class="game-wrap">
+  const isAssembly = id === 'taller-ensamblaje';
+  const isGpuChallenge = id === 'renderizado-gpu';
+  const compactAssembly = isAssembly && window.innerWidth < 768;
+  const canvasWidth = isAssembly && !compactAssembly ? 960 : 480;
+  const canvasHeight = compactAssembly ? 1200 : isGpuChallenge
+    ? Math.max(420, Math.min(850, window.innerHeight - 230))
+    : 1370;
+  show(`<div class="game-wrap ${isAssembly ? 'assembly-game-wrap' : ''} ${isGpuChallenge ? 'gpu-game-wrap' : ''}">
     <div class="game-toolbar">
       <span class="game-title">${g.icon} ${esc(g.name)}</span>
-      <button class="btn btn-tk alt" id="pause-game" type="button" aria-pressed="false">⏸ Pausar</button>
+      <div class="game-toolbar-actions">
+        ${isGpuChallenge ? '<button class="btn btn-tk alt" id="restart-game" type="button">↻ Reiniciar</button>' : ''}
+        <button class="btn btn-tk alt" id="pause-game" type="button" aria-pressed="false">⏸ Pausar</button>
+      </div>
     </div>
     <div class="game-stage">
-      <canvas id="cv" width="480" height="640" aria-label="${esc(g.name)}"></canvas>
-      <div class="game-paused" id="game-paused" hidden role="status" aria-live="polite">
-        <h2>Partida en pausa</h2>
+      <canvas id="cv" width="${canvasWidth}" height="${canvasHeight}" aria-label="${esc(g.name)}"></canvas>
+      <div class="game-paused" id="game-paused" hidden role="dialog" aria-modal="true" aria-labelledby="game-paused-title">
+        <h2 id="game-paused-title">Partida en pausa</h2>
+        <p>Si sales, esta ronda no contará para tu progreso.</p>
         <button class="btn btn-tk" id="resume-game" type="button">▶ Continuar</button>
+        <button class="btn btn-tk alt" id="exit-game" type="button">🏠 Salir al menú</button>
       </div>
     </div>
     ${id === 'carrera' ? `<div class="race-touch-controls" id="race-touch-controls" aria-label="Controles de Carrera Cósmica">
@@ -580,17 +710,29 @@ function play(id, g, s) {
       <button class="race-control nitro" type="button" data-control="nitro" aria-label="Mantener para usar turbo">🚀 <span>Mantén para turbo</span></button>
       <button class="race-control" type="button" data-control="right" aria-label="Cambiar al carril derecho"><span>Derecha</span> ▶</button>
     </div>` : ''}
-    <p class="text-center mt-2 mb-0" data-speak="${esc(g.controls)}">${esc(g.controls)}</p></div>`);
+    ${isAssembly ? '' : `<p class="text-center mt-2 mb-0" data-speak="${esc(g.controls)}">${esc(g.controls)}</p>`}</div>`);
   const Game = ENGINES[id] || DefenseGame;
   currentGame = new Game(document.querySelector('#cv'), s.profile, async o => {
     currentGame = null;
+    const activeGameRoute = `#/juego/${id}`;
     try {
-      const r = await api('/games/finish', 'POST', { sessionId: s.sessionId, crashed: !!o.crashed, position: o.position, waves: o.waves, won: !!o.won, score: o.score });
-      showResult(id, g, o, r);
-    } catch (x) { show(`<div class="panel"><h2>Ups</h2><p>${esc(x.message)}</p><a class="btn btn-tk" href="#/mundo">Volver al mundo</a></div>`); }
+      const result = {
+        sessionId: s.sessionId, crashed: !!o.crashed, position: o.position, waves: o.waves,
+        won: !!o.won, score: o.score,
+        ...(id === 'renderizado-gpu' ? { cores: o.cores, distance: o.distance, hits: o.hits, renderMode: o.renderMode } : {})
+      };
+      const r = await api('/games/finish', 'POST', result);
+      if (location.hash === activeGameRoute) showResult(id, g, o, r);
+    } catch (x) {
+      if (location.hash === activeGameRoute) {
+        show(`<div class="panel"><h2>Ups</h2><p>${esc(x.message)}</p><a class="btn btn-tk" href="#/mundo">Volver al mundo</a></div>`);
+      }
+    }
   });
   const pauseButton = document.querySelector('#pause-game');
   const pauseOverlay = document.querySelector('#game-paused');
+  const restartButton = document.querySelector('#restart-game');
+  if (restartButton) restartButton.onclick = () => currentGame?.restartLevel();
   const raceControls = document.querySelector('#race-touch-controls');
   if (raceControls) {
     let nitroPointer = null;
@@ -640,20 +782,30 @@ function play(id, g, s) {
   };
   pauseButton.onclick = togglePause;
   document.querySelector('#resume-game').onclick = togglePause;
+  document.querySelector('#exit-game').onclick = () => {
+    if (window.confirm('¿Salir de la partida? El progreso de esta ronda no se guardará.')) {
+      location.hash = '#/mundo';
+    }
+  };
   currentGame.start();
 }
 
+// Presenta el resultado calculado en el servidor; el cliente solo muestra recompensas recibidas.
 function showResult(id, g, o, r) {
   const title = r.crashed ? '¡Tu PC se cerró!'
     : id === 'carrera' ? `¡Llegaste en el puesto ${o.position}!`
     : id === 'clasificador' ? `¡Atrapaste ${o.good} componentes!`
-    : id === 'organizador-disco' ? (o.won ? '¡Disco organizado!' : '¡El disco se llenó!')
+      : id === 'renderizado-gpu' ? (o.won ? '¡Pista renderizada!' : '¡La GPU se sobrecalentó!')
+      : id === 'taller-ensamblaje' ? (o.won ? '¡PC ensamblado!' : o.timedOut ? '¡Se acabó el tiempo!' : '¡Taller terminado!')
+      : id === 'organizador-disco' ? (o.won ? '¡Disco organizado!' : '¡El disco se llenó!')
     : id === 'laberinto-datos' ? (o.won ? '¡Laberinto completado!' : '¡Byte necesita más práctica!')
     : id === 'ciber-guardian' ? (o.won ? '¡CPU a salvo!' : '¡Defiende la CPU!')
     : o.won ? '¡Defendiste la base!' : `Superaste ${o.waves} oleada${o.waves === 1 ? '' : 's'}`;
   const stats = r.crashed ? '<strong>Resultado:</strong> la partida se cerró por el rendimiento del PC.'
     : id === 'carrera' ? `🏁 Puesto <strong>${o.position || '—'}/3</strong>`
     : id === 'clasificador' ? `🧩 <strong>${o.good || 0}</strong> atrapados <span>·</span> ❌ ${o.bad || 0}`
+    : id === 'renderizado-gpu' ? `🚀 <strong>${o.distance || 0}</strong> m <span>·</span> ⚡ <strong>${o.cores || 0}</strong> núcleos <span>·</span> 🌡️ ${o.temperature || 55}°C · ${o.hits || 0}/3 choques de polvo · ${o.renderMode === 'rtx' ? 'RTX' : 'Retro'}`
+    : id === 'taller-ensamblaje' ? `🛠️ <strong>${o.installed || 0}/6</strong> piezas instaladas${o.elapsedSeconds != null ? ` <span>·</span> ⏱️ ${Math.floor(o.elapsedSeconds / 60)}:${String(o.elapsedSeconds % 60).padStart(2, '0')}` : ''}`
     : id === 'organizador-disco' ? `📂 <strong>${o.lines || 0}</strong> filas <span>·</span> ${o.pieces || 0} bloques`
     : id === 'laberinto-datos' ? `📦 <strong>${o.packetsCollected || 0}/${o.totalPackets || 8}</strong> paquetes`
     : `🛡️ <strong>${o.waves || 0}/3</strong> oleadas`;
@@ -662,6 +814,10 @@ function showResult(id, g, o, r) {
     : id === 'carrera' ? (o.position === 1
       ? '¡Genial! Prueba una dificultad más alta.'
       : 'Recoge ⚡ y esquiva los conos.')
+    : id === 'taller-ensamblaje' ? (o.timedOut
+      ? 'El SSD SATA es una pieza distractora: busca el SSD M.2. Intenta de nuevo y administra el tiempo.'
+      : '¡Aprendiste dónde va cada pieza! Prueba otra vez y recuerda que la pasta térmica va sobre el procesador.')
+    : id === 'renderizado-gpu' ? 'Esquiva las nubes de polvo que obstruyen la ventilación de la GPU. Si se acumula demasiado calor, la tarjeta reduce su rendimiento y puede apagarse para protegerse.'
     : id === 'organizador-disco' ? (o.won
       ? '¡Liberaste seis filas y organizaste el disco!'
       : 'Gira los bloques y libera seis filas antes de que se llene.')
@@ -690,22 +846,28 @@ function showResult(id, g, o, r) {
     <button class="btn btn-tk" id="again" type="button">Jugar otra vez</button>
     <a class="btn btn-tk alt" href="#/mi-pc">Comprar piezas</a> <a class="btn btn-tk alt" href="#/mundo">🌍 Mi mundo</a></div>`);
   // "Jugar otra vez" vuelve a preguntar la dificultad y arranca sin más pantallas.
-  document.querySelector('#again').onclick = () => startGame(id, g);
+  document.querySelector('#again').onclick = () => startGame(id, g, undefined, { renderMode: o.renderMode });
 }
 
 async function viewProgress() {
   const d = await api('/progress');
+  if (location.hash !== '#/progreso') return;
   show(`<h2 class="mb-3">Mi progreso</h2><div class="panel mb-4"><div class="d-flex justify-content-between"><strong>Nivel ${d.progress.level}</strong><span class="coins-pill">🪙 ${d.coins}</span></div>${bar(d.progress)}</div>
     <div class="row g-3"><div class="col-lg-6"><div class="panel h-100"><h3 class="h5">Juegos</h3>${d.missions.map(m => `<div class="d-flex justify-content-between align-items-center border-bottom py-2"><span>${esc(m.title)}</span>${stars(m.stars)}</div>`).join('')}</div></div>
     <div class="col-lg-6"><div class="panel h-100"><h3 class="h5">Insignias</h3><div class="d-flex flex-wrap gap-2">${d.achievements.map(a => `<span class="badge-tk border ${a.unlocked ? '' : 'locked'}" title="${esc(a.description)}">${a.icon} ${esc(a.name)}</span>`).join('')}</div></div></div></div>
     <div class="panel mt-3"><h3 class="h5">Últimas partidas</h3>${d.attempts.length ? `<div class="table-responsive"><table class="table mb-0"><thead><tr><th>Juego</th><th>Puntaje</th><th>Fecha</th></tr></thead><tbody>${d.attempts.map(a => `<tr><td>${esc(a.title)}</td><td>${a.score}</td><td>${new Date(a.created_at).toLocaleString('es')}</td></tr>`).join('')}</tbody></table></div>` : '<p class="mb-0">Todavía no has jugado. ¡Elige un juego en Mi mundo!</p>'}</div>`);
 }
 
+// Resuelve el hash de navegación y vuelve a comprobar la sesión antes de mostrar vistas privadas.
+let routeSequence = 0;
 async function route() {
+  const sequence = ++routeSequence;
+  const routeHash = location.hash || '#/';
   if (currentGame) { currentGame.stop(); currentGame = null; }
-  const [, page, arg] = (location.hash || '#/').split('/');
+  const [, page, arg] = routeHash.split('/');
   try {
     if (me === null) { const r = await api('/auth/me'); me = r.user || false; }
+    if (sequence !== routeSequence || location.hash !== routeHash) return;
     if (['mundo', 'mi-pc', 'juego', 'progreso'].includes(page) && !me) { location.hash = '#/entrar'; return; }
     if (page === 'entrar' && me) { location.hash = '#/mundo'; return; }
     
@@ -718,6 +880,7 @@ async function route() {
     const views = { '': viewWelcome, entrar: () => viewAuth(arg), mundo: viewWorld, 'mi-pc': () => viewPc(), juego: () => viewGame(arg), progreso: viewProgress };
     await (views[page || ''] || viewWelcome)();
   } catch (e) {
+    if (sequence !== routeSequence || location.hash !== routeHash) return;
     if (e.status === 401) { me = false; location.hash = '#/entrar'; return; }
     show(`<div class="panel"><h2>Ups, algo falló</h2><p>${esc(e.message)}</p><a class="btn btn-tk" href="#/">Volver al inicio</a></div>`);
   }

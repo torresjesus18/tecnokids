@@ -5,9 +5,12 @@ const ProgressService = require('./ProgressService');
 
 const router = express.Router();
 const progress = new ProgressService();
+// Adapta promesas a Express 4 para que los errores lleguen al middleware final.
 const h = fn => (req, res, next) => fn(req, res).catch(next);
+// Protege las rutas de progreso, compras, partidas y premios con la sesión vigente.
 const auth = (req, res, next) => req.session.userId ? next() : res.status(401).json({ error: 'Inicia sesión para continuar' });
 
+// Registro, hash de contraseña, saldo inicial y sesión se crean como una sola operación.
 router.post('/auth/register', h(async (req, res) => {
   const { username = '', email = '', password = '' } = req.body || {};
   if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) return res.status(400).json({ error: 'El alias debe tener 3 a 20 letras, números o guion bajo' });
@@ -34,6 +37,7 @@ router.post('/auth/login', h(async (req, res) => {
   const r = await pool.query('SELECT id, username, password_hash FROM users WHERE email=$1', [String(email).toLowerCase()]);
   const ok = r.rows[0] && await bcrypt.compare(String(password), r.rows[0].password_hash);
   if (!ok) return res.status(401).json({ error: 'Correo o contraseña incorrectos' });
+  // Regenerar el identificador evita reutilizar una sesión previa al iniciar sesión.
   req.session.regenerate(err => {
     if (err) return res.status(500).json({ error: 'Error interno del servidor' });
     req.session.userId = r.rows[0].id;
@@ -64,7 +68,9 @@ const act = fn => h(async (req, res) => {
 });
 router.post('/shop/buy', auth, act((id, b) => progress.buy(id, String(b.code || ''))));
 router.post('/pc/equip', auth, act((id, b) => progress.equip(id, b)));
-router.post('/games/start', auth, act((id, b) => progress.startGame(id, String(b.game || ''), String(b.difficulty || 'medio'))));
+router.post('/games/start', auth, act((id, b) => progress.startGame(
+  id, String(b.game || ''), String(b.difficulty || 'medio'), b.renderMode == null ? undefined : String(b.renderMode)
+)));
 router.post('/games/finish', auth, act((id, b) => progress.finishGame(id, b.sessionId, b)));
 router.get('/roulette', auth, h(async (req, res) => res.json(await progress.roulette(req.session.userId))));
 router.post('/roulette/spin', auth, act(id => progress.spin(id)));

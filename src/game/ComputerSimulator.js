@@ -1,6 +1,6 @@
 const KINDS = { cpu: 'procesador', ram: 'memoria', gpu: 'tarjeta gráfica', rom: 'almacenamiento ROM' };
 
-// Convierte las piezas del niño en un "perfil de rendimiento" determinista para cada juego.
+// Traduce la configuración del PC a límites reproducibles que usan los juegos y sus consejos.
 class ComputerSimulator {
   constructor(parts, games) { this.parts = parts; this.games = games; }
 

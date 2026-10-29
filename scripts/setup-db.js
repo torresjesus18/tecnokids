@@ -6,9 +6,12 @@ const migrations = [
   'migracion-juegos.sql',
   'migracion-ruleta.sql',
   'migracion-rom.sql',
-  'migracion-nuevos-juegos.sql'
+  'migracion-nuevos-juegos.sql',
+  'migracion-taller-ensamblaje.sql',
+  'migracion-renderizado-gpu.sql'
 ];
 
+// Aplica el esquema base y las migraciones pendientes, registrando cada archivo al completarlo.
 async function setupDatabase() {
   let client;
   try {
@@ -37,6 +40,7 @@ async function setupDatabase() {
         }
 
         if (name === 'migracion-juegos.sql') {
+          // Si las tablas ya existían, registra la migración sin repetir cambios sobre datos vivos.
           const existingSchema = await client.query(`
             SELECT
               to_regclass('public.user_pc') IS NOT NULL

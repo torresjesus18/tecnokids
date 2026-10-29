@@ -1,3 +1,4 @@
+# Blueprint de Render: configura el servidor Node y genera el secreto de sesión.
 services:
   - type: web
     name: tecnokids

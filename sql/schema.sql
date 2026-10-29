@@ -1,3 +1,4 @@
+-- Esquema inicial de cuentas, misiones, progreso, intentos e insignias.
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   username VARCHAR(20) UNIQUE NOT NULL,
