@@ -66,7 +66,7 @@ const teamSection = `<section class="team-section mt-4" aria-labelledby="team-ti
     <div class="team-member"><span aria-hidden="true">👩‍💻</span><strong>Karoll Rodríguez</strong></div>
     <div class="team-member"><span aria-hidden="true">👨‍💻</span><strong>Camilo Correa</strong></div>
     <div class="team-member"><span aria-hidden="true">👨‍🚀</span><strong>Jesús Torres</strong></div>
-    <div class="team-member team-member-pending"><span aria-hidden="true">✨</span><strong>Integrante por confirmar</strong></div>
+    <div class="team-member"><span aria-hidden="true">👨‍💻</span><strong>Wiston</strong></div>
   </div>
 </section>`;
 
@@ -867,7 +867,7 @@ async function route() {
   const [, page, arg] = routeHash.split('/');
   try {
     if (me === null) { const r = await api('/auth/me'); me = r.user || false; }
-    if (sequence !== routeSequence || location.hash !== routeHash) return;
+    if (sequence !== routeSequence || (location.hash || '#/') !== routeHash) return;
     if (['mundo', 'mi-pc', 'juego', 'progreso'].includes(page) && !me) { location.hash = '#/entrar'; return; }
     if (page === 'entrar' && me) { location.hash = '#/mundo'; return; }
     
@@ -880,7 +880,7 @@ async function route() {
     const views = { '': viewWelcome, entrar: () => viewAuth(arg), mundo: viewWorld, 'mi-pc': () => viewPc(), juego: () => viewGame(arg), progreso: viewProgress };
     await (views[page || ''] || viewWelcome)();
   } catch (e) {
-    if (sequence !== routeSequence || location.hash !== routeHash) return;
+    if (sequence !== routeSequence || (location.hash || '#/') !== routeHash) return;
     if (e.status === 401) { me = false; location.hash = '#/entrar'; return; }
     show(`<div class="panel"><h2>Ups, algo falló</h2><p>${esc(e.message)}</p><a class="btn btn-tk" href="#/">Volver al inicio</a></div>`);
   }
