@@ -248,6 +248,7 @@ class AssemblyWorkshopGame extends BaseGame {
   constructor(...args) {
     super(...args);
     this.compact = this.W < 600;
+    this.shortLayout = this.compact && this.H < 1000;
     this.timeLimitSec = this.p.timeLimitSec || { facil: 120, medio: 90, dificil: 60 }[this.p.difficulty] || 90;
     this.ready = 0;
     this.t = 0;
@@ -286,14 +287,12 @@ class AssemblyWorkshopGame extends BaseGame {
   }
 
   partCards() {
-    const desk = this.compact
-      ? { x: 12, y: 555, w: this.W - 24, h: 385 }
-      : { x: 16, y: 970, w: this.W - 32, h: 250 };
-    const columns = this.compact ? 2 : 4;
+    const desk = this.deskBounds();
+    const columns = 2;
     const cardW = this.compact ? 218 : 220;
     const cardH = this.compact ? 92 : 108;
     const rowCount = Math.ceil(assemblyParts.length / columns);
-    const rowGap = this.compact ? 10 : 8;
+    const rowGap = 8;
     const titleSpace = 34;
     const rowHeight = (desk.h - titleSpace - rowGap * (rowCount + 1)) / rowCount;
     return assemblyParts.map((part, index) => {
@@ -309,10 +308,19 @@ class AssemblyWorkshopGame extends BaseGame {
     });
   }
 
+  deskBounds() {
+    if (this.compact) {
+      return this.shortLayout
+        ? { x: 12, y: 410, w: this.W - 24, h: 280 }
+        : { x: 12, y: 555, w: this.W - 24, h: 385 };
+    }
+    return { x: 550, y: 100, w: this.W - 562, h: 490 };
+  }
+
   caseBounds() {
     const box = this.compact
-      ? { x: 10, y: 96, w: this.W - 20, h: 420 }
-      : { x: 12, y: 100, w: this.W - 24, h: 850 };
+      ? { x: 10, y: 96, w: this.W - 20, h: this.shortLayout ? 300 : 420 }
+      : { x: 12, y: 100, w: 520, h: 480 };
     const ratio = 685 / 626;
     const w = Math.min(box.w, box.h * ratio);
     const h = w / ratio;
@@ -510,9 +518,7 @@ class AssemblyWorkshopGame extends BaseGame {
   }
 
   render(c) {
-    const W = this.W, H = this.H, desk = this.compact
-      ? { x: 12, y: 555, w: W - 24, h: 385 }
-      : { x: 16, y: 970, w: W - 32, h: 250 };
+    const W = this.W, H = this.H, desk = this.deskBounds();
     const caseBox = this.caseBounds(), board = this.boardBounds(), slots = this.slots();
     c.fillStyle = '#d8f4ff'; c.fillRect(0, 0, W, H);
     c.fillStyle = '#0c5374'; c.textAlign = 'left'; c.textBaseline = 'middle';
@@ -600,7 +606,7 @@ class AssemblyWorkshopGame extends BaseGame {
       this.drawImage(c, part.id, { x: this.dragPoint.x - 42, y: this.dragPoint.y - 32, w: 84, h: 64 });
     }
 
-    const panelY = this.compact ? 955 : 1235;
+    const panelY = this.compact ? (this.shortLayout ? 710 : 955) : 610;
     const panelH = H - panelY - 16;
     c.fillStyle = 'rgba(255,255,255,.92)'; c.strokeStyle = '#4f9bb2'; c.lineWidth = 2;
     c.beginPath();
@@ -613,12 +619,12 @@ class AssemblyWorkshopGame extends BaseGame {
     c.textAlign = 'left'; c.font = `bold ${this.compact ? 14 : 16}px sans-serif`;
     const step = assemblySteps[this.currentStep];
     const message = this.feedbackT > 0 ? this.feedback : step?.message || '¡Ensamblaje terminado!';
-    this.drawText(c, `🤖 Byte: ${message}`, 30, panelY + 24, this.compact ? W - 60 : W * 0.52, this.compact ? 18 : 21, 2);
+    this.drawText(c, `🤖 Byte: ${message}`, 30, panelY + 24, W - 60, this.compact ? 18 : 21, 2);
     c.fillStyle = '#567080'; c.font = `bold ${this.compact ? 12 : 14}px sans-serif`;
-    this.drawText(c, 'El SSD SATA es distractor. ¡Termina rápido y evita errores para ganar más monedas!', 30, panelY + panelH - (this.compact ? 38 : 20), W - 60, this.compact ? 16 : 18, 2);
-    const progressX = this.compact ? 30 : 590;
-    const progressW = this.compact ? W - 60 : W - progressX - 30;
-    const progressY = this.compact ? panelY + 72 : panelY + 52;
+    this.drawText(c, 'El SSD SATA es distractor. ¡Termina rápido y evita errores para ganar más monedas!', 30, panelY + panelH - (this.compact ? 38 : 28), W - 60, this.compact ? 16 : 18, 2);
+    const progressX = 30;
+    const progressW = W - 60;
+    const progressY = panelY + (this.compact ? 72 : 68);
     c.fillStyle = '#d7e3e8'; c.fillRect(progressX, progressY, progressW, 16);
     c.fillStyle = '#35b88f'; c.fillRect(progressX, progressY, progressW * this.installed.size / assemblySteps.length, 16);
     c.fillStyle = '#153f54'; c.font = 'bold 12px sans-serif'; c.textAlign = 'center';
@@ -807,7 +813,7 @@ class RaceGame extends BaseGame {
 class DefenseGame extends BaseGame {
   constructor(...a) {
     super(...a);
-    this.ship = { x: 240, y: 590, hp: 3, inv: 0, cool: 0 };
+    this.ship = { x: 240, y: Math.min(590, this.H - 190), hp: 3, inv: 0, cool: 0 };
     this.en = []; this.pb = []; this.eb = []; this.pt = []; this.drops = [];
     this.stars = [[], [], []];
     for (let i = 0; i < 54; i++) this.stars[i % 3].push({ x: (i * 71) % 480, y: (i * 131) % 640, s: 1 + (i % 3) });
@@ -2132,4 +2138,22 @@ class GpuRenderGame extends BaseGame {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = { BaseGame, RaceGame, DefenseGame, CatcherGame, GuardianGame, DiskOrganizerGame, DataMazeGame, AssemblyWorkshopGame, GpuRenderGame };
+// Conserva las coordenadas internas y calcula un lienzo que CSS puede escalar al viewport.
+function gameCanvasDimensions(id, viewportWidth, viewportHeight, availableWidth) {
+  const isAssembly = id === 'taller-ensamblaje';
+  const compact = isAssembly && viewportWidth < 768;
+  const width = isAssembly ? (compact ? 480 : 960) : 480;
+  const minHeight = isAssembly ? (compact ? 900 : 800) : ({
+    carrera: 600, defensa: 600, clasificador: 560, 'ciber-guardian': 600,
+    'organizador-disco': 650, 'laberinto-datos': 560
+  }[id] || 420);
+  const reservedHeight = isAssembly ? 150 : id === 'carrera' ? 250 : 150;
+  const maxDisplayHeight = Math.max(300, viewportHeight - reservedHeight);
+  const displayWidth = Math.max(1, Math.min(width, availableWidth));
+  const height = isAssembly
+    ? minHeight
+    : Math.max(minHeight, Math.ceil(maxDisplayHeight * width / displayWidth));
+  return { width, height };
+}
+
+if (typeof module !== 'undefined') module.exports = { BaseGame, RaceGame, DefenseGame, CatcherGame, GuardianGame, DiskOrganizerGame, DataMazeGame, AssemblyWorkshopGame, GpuRenderGame, gameCanvasDimensions };

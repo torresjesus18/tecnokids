@@ -6,10 +6,29 @@ const { parts, starter, games } = require('../src/game/data');
 const ComputerSimulator = require('../src/game/ComputerSimulator');
 const RewardManager = require('../src/game/RewardManager');
 const PlayerProgress = require('../src/game/PlayerProgress');
-const { BaseGame, RaceGame, CatcherGame, DiskOrganizerGame, DataMazeGame, AssemblyWorkshopGame, GpuRenderGame } = require('../public/js/games');
+const { BaseGame, RaceGame, DefenseGame, CatcherGame, DiskOrganizerGame, DataMazeGame, AssemblyWorkshopGame, GpuRenderGame, gameCanvasDimensions } = require('../public/js/games');
 const ProgressService = require('../src/ProgressService');
 const sim = new ComputerSimulator(parts, games), r = new RewardManager();
 const best = { cpu: 'cpu4', ram: 'ram4', gpu: 'gpu4', rom: 'rom4' };
+
+for (const viewport of [{ width: 390, height: 844, appWidth: 366 }, { width: 1365, height: 768, appWidth: 1200 }]) {
+  for (const id of ['carrera', 'clasificador', 'defensa', 'ciber-guardian', 'organizador-disco', 'laberinto-datos', 'renderizado-gpu']) {
+    const size = gameCanvasDimensions(id, viewport.width, viewport.height, viewport.appWidth);
+    const reservedHeight = id === 'carrera' ? 250 : 150;
+    const scale = Math.min(1, viewport.appWidth / size.width, (viewport.height - reservedHeight) / size.height);
+    assert.ok(size.width * scale <= viewport.appWidth, `${id} debe caber horizontalmente`);
+    assert.ok(size.height * scale <= viewport.height - reservedHeight, `${id} debe caber verticalmente`);
+  }
+}
+assert.deepStrictEqual(gameCanvasDimensions('taller-ensamblaje', 390, 844, 366), { width: 480, height: 900 });
+assert.deepStrictEqual(gameCanvasDimensions('taller-ensamblaje', 1365, 768, 1200), { width: 960, height: 800 });
+assert.deepStrictEqual(gameCanvasDimensions('taller-ensamblaje', 800, 600, 752), { width: 960, height: 800 });
+for (const viewport of [{ width: 390, height: 844, appWidth: 366 }, { width: 1365, height: 768, appWidth: 1200 }]) {
+  const size = gameCanvasDimensions('taller-ensamblaje', viewport.width, viewport.height, viewport.appWidth);
+  const scale = Math.min(1, viewport.appWidth / size.width, (viewport.height - 150) / size.height);
+  assert.ok(size.width * scale <= viewport.appWidth, 'el taller debe caber horizontalmente');
+  assert.ok(size.height * scale <= viewport.height - 150, 'el taller debe caber verticalmente');
+}
 
 // Rendimiento simulado por hardware y pagos básicos por juego.
 const a = sim.profile('carrera', starter);
@@ -84,6 +103,8 @@ assert.deepStrictEqual(new PlayerProgress({ points: 200, level: 2 }).toJSON(), {
 
 const canvas = { width: 480, height: 640, getContext: () => ({}) };
 // Contratos de controles y comportamiento determinista de los motores.
+const compactDefense = new DefenseGame({ ...canvas, height: 600 }, { ...sim.profile('defensa', best) }, () => {});
+assert.strictEqual(compactDefense.ship.y, 410, 'la nave debe subir con el canvas reducido y despejar los botones táctiles');
 const catcher = new CatcherGame(canvas, { ...sim.profile('clasificador', best), difficulty: 'facil' }, () => {});
 const firstTarget = catcher.currentTarget;
 catcher.advanceTarget();
@@ -254,14 +275,20 @@ timedOutAssembly.update(0);
 assert.deepStrictEqual(timedOutAssembly.endResult, {
   crashed: false, won: false, timedOut: true, score: 40, installed: 3, elapsedSeconds: 120
 }, 'al terminarse el tiempo debe guardar avance parcial sin contar como victoria');
-const compactAssembly = new AssemblyWorkshopGame({ ...canvas, width: 480, height: 1200 }, assemblyProfile, () => {});
+const compactAssembly = new AssemblyWorkshopGame({ ...canvas, width: 480, height: 900 }, assemblyProfile, () => {});
 assert.strictEqual(compactAssembly.compact, true);
+assert.strictEqual(compactAssembly.shortLayout, true);
 assert.strictEqual(compactAssembly.timeLimitSec, 120);
 assert.ok(compactAssembly.partCards().every(part => part.x + part.w / 2 <= compactAssembly.W), 'las piezas deben caber en el taller móvil');
-assert.ok(compactAssembly.partCards().every(part => part.y + part.h / 2 <= compactAssembly.H), 'el inventario debe caber dentro del canvas móvil');
+assert.ok(compactAssembly.partCards().every(part => part.y + part.h / 2 <= compactAssembly.deskBounds().y + compactAssembly.deskBounds().h), 'el inventario debe caber en su mesa móvil');
+assert.ok(compactAssembly.deskBounds().y + compactAssembly.deskBounds().h < 710, 'la mesa móvil debe dejar espacio para el panel de instrucciones');
 for (const part of compactAssembly.partCards()) {
   assert.ok(fs.existsSync(path.join(__dirname, '../public/img/ensamblaje', part.src)), `debe existir la imagen de ${part.id}`);
 }
+const wideAssembly = new AssemblyWorkshopGame({ ...canvas, width: 960, height: 800 }, assemblyProfile, () => {});
+assert.ok(wideAssembly.caseBounds().x + wideAssembly.caseBounds().w < wideAssembly.deskBounds().x, 'el gabinete y el inventario deben quedar separados en escritorio');
+assert.ok(wideAssembly.partCards().every(part => part.y + part.h / 2 <= wideAssembly.deskBounds().y + wideAssembly.deskBounds().h), 'las piezas deben caber en la mesa de escritorio');
+assert.ok(wideAssembly.deskBounds().y + wideAssembly.deskBounds().h < 610, 'la mesa de escritorio debe dejar espacio para el panel de instrucciones');
 assert.ok(fs.existsSync(path.join(__dirname, '../public/img/ensamblaje/gabinete-abierto.webp')), 'debe existir la imagen del gabinete');
 
 const interactionAssembly = new AssemblyWorkshopGame({ ...canvas, width: 480, height: 1200 }, assemblyProfile, () => {});

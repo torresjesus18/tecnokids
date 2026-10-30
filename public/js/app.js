@@ -683,12 +683,8 @@ function play(id, g, s) {
   sm.playBGM('game');
   const isAssembly = id === 'taller-ensamblaje';
   const isGpuChallenge = id === 'renderizado-gpu';
-  const compactAssembly = isAssembly && window.innerWidth < 768;
-  const canvasWidth = isAssembly && !compactAssembly ? 960 : 480;
-  const canvasHeight = compactAssembly ? 1200 : isGpuChallenge
-    ? Math.max(420, Math.min(850, window.innerHeight - 230))
-    : 1370;
-  show(`<div class="game-wrap ${isAssembly ? 'assembly-game-wrap' : ''} ${isGpuChallenge ? 'gpu-game-wrap' : ''}">
+  const canvasSize = gameCanvasDimensions(id, window.innerWidth, window.innerHeight, app.clientWidth);
+  show(`<div class="game-wrap ${isAssembly ? 'assembly-game-wrap' : ''} ${isGpuChallenge ? 'gpu-game-wrap' : ''} ${id === 'carrera' ? 'race-game-wrap' : ''}">
     <div class="game-toolbar">
       <span class="game-title">${g.icon} ${esc(g.name)}</span>
       <div class="game-toolbar-actions">
@@ -697,7 +693,7 @@ function play(id, g, s) {
       </div>
     </div>
     <div class="game-stage">
-      <canvas id="cv" width="${canvasWidth}" height="${canvasHeight}" aria-label="${esc(g.name)}"></canvas>
+      <canvas id="cv" width="${canvasSize.width}" height="${canvasSize.height}" aria-label="${esc(g.name)}"></canvas>
       <div class="game-paused" id="game-paused" hidden role="dialog" aria-modal="true" aria-labelledby="game-paused-title">
         <h2 id="game-paused-title">Partida en pausa</h2>
         <p>Si sales, esta ronda no contará para tu progreso.</p>
